@@ -1,0 +1,2288 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16343A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Compagno di Viaggio</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --paper:#F4F7F6; --card:#FFFFFF; --ink:#16343A; --ink-soft:#4A6468;
+  --pin:#E4573D; --teal:#2E6E6A; --teal-soft:#DCEBE9; --stamp:#D9A441;
+  --line:#D7E2E0; --radius:14px;
+  --mono:ui-monospace,"SF Mono","Roboto Mono",Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --disp:"Avenir Next Condensed","Arial Narrow",var(--sans);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body.dark{
+  --paper:#101B1D; --card:#182A2D; --ink:#E8F1F0; --ink-soft:#9BB5B3;
+  --teal:#4FA39D; --teal-soft:#1F3A3D; --line:#2A4548;
+}
+body.dark input,body.dark select,body.dark textarea{background:#132326;color:var(--ink);border-color:var(--line)}
+body.dark .empty{background:#132326}
+body.dark .copybtn{background:#1F3A3D;color:var(--ink-soft)}
+body.dark .icon-btn.del{background:#3A2422}
+body.dark #dragGhost{background:#182A2D;color:var(--ink)}
+body.dark nav.tabs{background:#0D1719}
+body.dark .pass{background:var(--card)}
+body.dark .pass .body::before,body.dark .pass .body::after{background:var(--paper)}
+html,body{height:100%}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);
+  padding-bottom:calc(64px + env(safe-area-inset-bottom));}
+header.app{position:sticky;top:0;z-index:500;background:var(--ink);color:#fff;
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:baseline;gap:10px}
+header.app h1{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:.06em;text-transform:uppercase}
+header.app .route{font-family:var(--mono);font-size:11px;color:#9CC6C9;letter-spacing:.12em}
+header.app .live{font-family:var(--mono);font-size:10px;color:#5BD68A;letter-spacing:.14em;display:none}
+header.app .live.on{display:block}
+header.app #gearBtn{margin-left:auto}
+main{max-width:640px;margin:0 auto;padding:14px 14px 24px}
+.view{display:none}
+.view.active{display:block;animation:fade .18s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view.active{animation:none}}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ink-soft);margin:18px 2px 8px;display:flex;align-items:center;gap:8px}
+.eyebrow::after{content:"";flex:1;border-top:1px dashed var(--line)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px;box-shadow:0 1px 2px rgba(22,52,58,.05)}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:15px;color:var(--ink);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;width:100%}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+.btn{border:none;border-radius:10px;padding:11px 14px;font-weight:600;font-size:14px}
+.btn-primary{background:var(--teal);color:#fff}
+.btn-ghost{background:var(--teal-soft);color:var(--teal)}
+.btn-danger{background:transparent;color:var(--pin);border:1px solid var(--pin)}
+.row{display:flex;gap:8px;align-items:center}
+.small{font-size:12px;color:var(--ink-soft)}
+.mt8{margin-top:8px}.mt12{margin-top:12px}
+
+/* ---- bottom nav ---- */
+nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:600;background:#fff;
+  border-top:1px solid var(--line);display:flex;justify-content:space-around;
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+nav.tabs button{background:none;border:none;display:flex;flex-direction:column;align-items:center;
+  gap:2px;font-family:var(--mono);font-size:8.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--ink-soft);padding:4px 5px;border-radius:10px}
+nav.tabs button.active{color:var(--teal);background:var(--teal-soft)}
+nav.tabs .ic{font-size:19px;line-height:1}
+
+/* ---- albero documenti ---- */
+.dnode{display:flex;align-items:center;gap:8px;padding:9px 4px;border-bottom:1px dashed var(--line);
+  border-radius:8px}
+.dnode:last-child{border-bottom:none}
+.dnode.sel{background:var(--teal-soft)}
+.dnode .dn{flex:1;min-width:0;cursor:pointer}
+.dnode .dn .t{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dnode .dn .s{font-family:var(--mono);font-size:10px;color:var(--ink-soft)}
+.dnode .arrow{width:16px;text-align:center;color:var(--ink-soft);font-size:11px}
+.dnode{user-select:none;-webkit-user-select:none}
+.dnode.dragsrc{opacity:.35}
+.dnode.droptgt{outline:2px solid var(--teal);background:var(--teal-soft)}
+#dragGhost{position:fixed;z-index:950;pointer-events:none;opacity:.9;background:#fff;
+  border:1px solid var(--teal);border-radius:10px;padding:8px 12px;font-weight:600;font-size:14px;
+  box-shadow:0 6px 18px rgba(22,52,58,.25);max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---- calcolatrice ---- */
+.calc-display{font-family:var(--mono);font-size:21px;text-align:right;background:var(--ink);
+  color:#EAF4F3;border-radius:10px;padding:8px 10px;min-height:42px;word-break:break-all}
+.calc-expr{display:block;font-size:10px;color:#9CC6C9;min-height:12px}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:8px;max-width:340px;margin-left:auto;margin-right:auto}
+.calc-grid button{font-family:var(--mono);font-size:15px;padding:7px 0;border:none;
+  border-radius:8px;background:var(--teal-soft);color:var(--ink)}
+.calc-grid button.op{background:var(--ink);color:#fff}
+.calc-grid button.eq{background:var(--pin);color:#fff}
+
+/* ---- valuta ---- */
+.fx-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.fx-swap{background:var(--teal-soft);border:none;border-radius:50%;width:38px;height:38px;
+  font-size:16px;color:var(--teal)}
+.fx-result{font-family:var(--mono);font-size:26px;font-weight:600;margin-top:10px}
+.fx-status{margin-top:6px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:baseline}
+.dot.ok{background:#3BA45D}.dot.off{background:var(--stamp)}
+
+/* ---- boarding pass countdown (firma visiva) ---- */
+.pass{position:relative;background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  display:grid;grid-template-columns:86px 1fr;overflow:hidden;margin-bottom:10px}
+.pass .stub{background:var(--ink);color:#fff;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:12px 6px;border-right:2px dashed var(--paper)}
+.pass .stub .n{font-family:var(--mono);font-size:30px;font-weight:700;line-height:1}
+.pass .stub .u{font-family:var(--mono);font-size:9px;letter-spacing:.2em;margin-top:4px;color:#9CC6C9}
+.pass .body{padding:10px 14px;position:relative}
+.pass .body::before,.pass .body::after{content:"";position:absolute;left:-8px;width:14px;height:14px;
+  border-radius:50%;background:var(--paper);border:1px solid var(--line)}
+.pass .body::before{top:-8px}.pass .body::after{bottom:-8px}
+.pass h3{font-family:var(--disp);font-size:17px;letter-spacing:.02em;text-transform:uppercase}
+.pass .meta{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:3px;letter-spacing:.05em}
+.pass .hm{font-family:var(--mono);font-size:11px;color:var(--pin);margin-top:5px}
+.pass .lnk,.item .lnk{display:inline-block;font-family:var(--mono);font-size:11px;margin-top:6px;
+  color:var(--teal);background:var(--teal-soft);border-radius:6px;padding:3px 8px;
+  text-decoration:none;letter-spacing:.05em}
+.copybtn{display:inline-block;font-family:var(--mono);font-size:11px;margin-top:6px;margin-left:6px;
+  color:var(--ink-soft);background:#EEF3F2;border:none;border-radius:6px;padding:3px 8px;cursor:pointer}
+
+/* ---- eventi / poi liste ---- */
+.item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
+  padding:11px 2px;border-bottom:1px dashed var(--line)}
+.item:last-child{border-bottom:none}
+.item .t{font-weight:600}
+.item .s{font-size:12px;color:var(--ink-soft);font-family:var(--mono);margin-top:2px}
+.item .acts{display:flex;gap:6px;flex-shrink:0}
+.icon-btn{border:none;background:var(--teal-soft);color:var(--teal);border-radius:8px;
+  width:34px;height:34px;font-size:15px}
+.icon-btn.del{background:#FBE9E4;color:var(--pin)}
+.done .t{text-decoration:line-through;color:var(--ink-soft)}
+.badge{font-family:var(--mono);font-size:10px;background:var(--teal-soft);color:var(--teal);
+  border-radius:6px;padding:2px 6px;letter-spacing:.08em;text-transform:uppercase}
+
+/* ---- mappa ---- */
+#map{height:320px;border-radius:var(--radius);border:1px solid var(--line);background:var(--teal-soft)}
+.map-hint{font-size:12px;color:var(--ink-soft);margin-top:6px}
+.leaflet-container{font-family:var(--sans)}
+
+/* ---- strumenti ---- */
+.tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.check{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px dashed var(--line)}
+.check:last-child{border-bottom:none}
+.check input[type=checkbox]{width:20px;height:20px;accent-color:var(--teal);flex-shrink:0}
+.empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:16px 8px;
+  border:1px dashed var(--line);border-radius:10px;background:#fff}
+.result-big{font-family:var(--mono);font-size:22px;font-weight:600;margin-top:8px}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <h1>Compagno di Viaggio</h1>
+  <span class="route" id="todayLabel"></span>
+  <span class="live" id="liveBadge">● LIVE</span>
+  <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
+</header>
+
+<main>
+<!-- ================= HOME ================= -->
+<section class="view active" id="view-home">
+  <div class="eyebrow">Spesa rapida</div>
+  <div class="card">
+    <div class="row">
+      <input type="number" id="qAmt" inputmode="decimal" placeholder="Importo">
+      <button class="btn btn-ghost" id="qAmtCur" data-mode="eur" style="min-width:64px">EUR</button>
+      <select id="qCat" style="max-width:110px"></select>
+      <button class="btn btn-primary" id="qAdd" style="min-width:48px">+</button>
+    </div>
+    <div class="small mt8" id="qRemain"></div>
+  </div>
+
+  <div class="eyebrow">Oggi</div>
+  <div class="card" id="todayCard"></div>
+
+  <div class="eyebrow">Convertitore valuta</div>
+  <div class="card">
+    <input type="number" id="fxAmount" inputmode="decimal" placeholder="Importo" value="100">
+    <div class="fx-grid mt8">
+      <select id="fxFrom"></select>
+      <button class="fx-swap" id="fxSwap" title="Inverti valute">⇅</button>
+      <select id="fxTo"></select>
+    </div>
+    <div class="fx-result" id="fxResult">—</div>
+    <div class="small fx-status" id="fxStatus"></div>
+    <div class="row mt8">
+      <button class="btn btn-ghost" id="fxRefresh" style="flex:1">↻ Aggiorna tassi</button>
+      <button class="btn btn-ghost" id="fxManualBtn" style="flex:1">Tasso manuale</button>
+    </div>
+    <div class="row mt8" id="fxManualRow" style="display:none">
+      <input type="number" id="fxManualRate" inputmode="decimal" placeholder="1 unità FROM = ? TO">
+      <button class="btn btn-primary" id="fxManualApply">OK</button>
+    </div>
+  </div>
+
+  <div class="eyebrow">Calcolatrice rapida</div>
+  <div class="card">
+    <div class="calc-display"><span class="calc-expr" id="calcExpr">&nbsp;</span><span id="calcOut">0</span></div>
+    <div class="calc-grid" id="calcGrid"></div>
+  </div>
+
+  <div class="eyebrow">Prossime partenze</div>
+  <div id="homeCountdowns"></div>
+</section>
+
+<!-- ================= EVENTI ================= -->
+<section class="view" id="view-eventi">
+  <div class="eyebrow">Countdown · 3 più vicini</div>
+  <div id="countdowns"></div>
+
+  <div class="eyebrow">Nuovo evento</div>
+  <div class="card">
+    <input id="evName" placeholder="Nome evento (es. Volo per Lisbona)">
+    <input class="mt8" id="evDate" type="datetime-local">
+    <input class="mt8" id="evPlace" placeholder="Luogo (facoltativo)">
+    <input class="mt8" id="evUrl" type="url" inputmode="url" placeholder="Link (biglietti, sito evento…) — facoltativo">
+    <button class="btn btn-primary mt8" id="evAdd" style="width:100%">+ Aggiungi al calendario</button>
+    <button class="btn btn-ghost mt8" id="evCancelEdit" style="width:100%;display:none">Annulla modifica</button>
+  </div>
+
+  <div class="eyebrow">Tutti gli eventi</div>
+  <div class="card" id="evList"></div>
+</section>
+
+<!-- ================= MAPPA ================= -->
+<section class="view" id="view-mappa">
+  <div class="eyebrow">Punti di interesse</div>
+  <div class="row" style="margin-bottom:8px">
+    <input id="mapSearch" placeholder="Cerca luogo o indirizzo (es. Via Roma 12, Torino)" enterkeyhint="search" autocomplete="off">
+    <button class="btn btn-primary" id="mapSearchBtn" style="min-width:52px">🔍</button>
+  </div>
+  <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
+  <div id="map"></div>
+  <div class="map-hint">Scrivi almeno 3 lettere per i suggerimenti automatici. Toccando la mappa, l'app riconosce il luogo o l'indirizzo sotto il dito. 📍 = da visitare, ✅ = visitato.</div>
+
+  <div class="card mt12" id="poiFormCard" style="display:none">
+    <div class="small" id="poiCoords"></div>
+    <input class="mt8" id="poiName" placeholder="Nome del luogo">
+    <select class="mt8" id="poiCat">
+      <option>Da visitare</option><option>Ristorante</option><option>Museo</option>
+      <option>Natura</option><option>Hotel</option><option>Altro</option>
+    </select>
+    <div class="row mt8">
+      <button class="btn btn-primary" id="poiSave" style="flex:1">Salva punto</button>
+      <button class="btn btn-ghost" id="poiCancel" style="flex:1">Annulla</button>
+    </div>
+  </div>
+
+  <div class="eyebrow">Elenco salvati</div>
+  <div class="card" id="poiList"></div>
+
+  <div class="eyebrow">Importa da Google Maps</div>
+  <div class="card">
+    <div class="small">Porta qui i tuoi luoghi salvati su Maps: da <b>Google Takeout</b> esporta «Salvati» (file CSV o GeoJSON), oppure da <b>My Maps</b> esporta in KML. Carica il file e i luoghi diventeranno punti spuntabili dell'elenco, sincronizzati col gruppo se la sync è attiva.</div>
+    <button class="btn btn-primary mt8" id="impBtn" style="width:100%">📥 Carica file esportato</button>
+    <input type="file" id="impFile" accept=".csv,.json,.geojson,.kml,application/json,text/csv" style="display:none">
+    <div class="small mt8" id="impStatus"></div>
+  </div>
+</section>
+
+<!-- ================= BUDGET ================= -->
+<section class="view" id="view-budget">
+  <div class="eyebrow">Il mio budget · personale</div>
+  <div class="card">
+    <div class="row">
+      <input type="number" id="bgTotal" inputmode="decimal" placeholder="Budget totale €">
+      <button class="btn btn-primary" id="bgSet" style="min-width:90px">Imposta</button>
+    </div>
+    <div class="row mt8">
+      <select id="bgCur" style="flex:1"></select>
+    </div>
+    <div class="small mt8">Valuta del viaggio: tutti gli importi verranno mostrati in € e in questa valuta.</div>
+    <div class="row mt8">
+      <input type="date" id="bgStart" title="Inizio viaggio">
+      <input type="date" id="bgEnd" title="Fine viaggio">
+    </div>
+    <div class="small mt8">Date del viaggio (dal — al): servono per calcolare il budget giornaliero.</div>
+    <div class="row mt8">
+      <input id="bgDest" placeholder="Città di destinazione (per il meteo in Home)">
+      <button class="btn btn-primary" id="bgDestSet" style="min-width:56px">OK</button>
+    </div>
+    <div class="small mt8" id="bgDestInfo"></div>
+    <div class="result-big" id="bgRemain">—</div>
+    <div class="small" id="bgDetail"></div>
+    <div style="height:8px;background:var(--teal-soft);border-radius:6px;margin-top:10px;overflow:hidden">
+      <div id="bgBar" style="height:100%;width:0%;background:var(--teal);transition:width .3s"></div>
+    </div>
+  </div>
+
+  <div class="eyebrow">Budget giornaliero · adattivo</div>
+  <div class="card" id="bgDaily"></div>
+
+  <div class="eyebrow">Andamento spese</div>
+  <div class="card" id="bgChart"></div>
+
+  <div class="eyebrow">Nuova spesa</div>
+  <div class="card">
+    <div class="row">
+      <input type="number" id="bgAmt" inputmode="decimal" placeholder="Importo">
+      <button class="btn btn-ghost" id="bgAmtCur" data-mode="eur" style="min-width:64px">EUR</button>
+      <select id="bgCat" style="max-width:120px"></select>
+    </div>
+    <input class="mt8" id="bgNote" placeholder="Nota (facoltativa)">
+    <div class="row mt8">
+      <input type="date" id="bgDate" style="flex:1" title="Data della spesa">
+      <button class="btn btn-ghost" id="bgDateToday" style="min-width:70px">Oggi</button>
+    </div>
+    <div class="small mt8">Data della spesa: di default oggi, ma puoi registrarla con data diversa.</div>
+    <label class="row mt8" id="bgSharedWrap" style="display:none;font-size:13px;color:var(--ink-soft)">
+      <input type="checkbox" id="bgShared" style="width:18px;height:18px;accent-color:var(--teal)"> Condividi col gruppo di viaggio
+    </label>
+    <button class="btn btn-primary mt8" id="bgAdd" style="width:100%">+ Registra spesa</button>
+    <button class="btn btn-ghost mt8" id="bgCancelEdit" style="width:100%;display:none">Annulla modifica</button>
+  </div>
+
+  <div class="eyebrow">Le mie spese</div>
+  <div class="card">
+    <div class="row" style="margin-bottom:8px">
+      <input type="date" id="bgFilter" style="flex:1" title="Filtra per giorno">
+      <button class="btn btn-ghost" id="bgFilterToday" style="min-width:60px">Oggi</button>
+      <button class="btn btn-ghost" id="bgFilterAll" style="min-width:60px">Tutte</button>
+    </div>
+    <div class="small" id="bgFilterInfo"></div>
+    <div id="bgList"></div>
+  </div>
+
+  <div class="eyebrow">Spese di gruppo</div>
+  <div class="card" id="bgGroup"><div class="empty">Attiva la Sincronizzazione live (⚙️ in alto a destra) per vedere le spese condivise da chi ha lo stesso codice viaggio.</div></div>
+</section>
+
+<!-- ================= DOCUMENTI ================= -->
+<section class="view" id="view-docs">
+  <div class="eyebrow">Documenti di viaggio · solo su questo dispositivo</div>
+  <div class="card">
+    <div class="row">
+      <button class="btn btn-primary" id="docUploadBtn" style="flex:1">📤 Carica file</button>
+      <button class="btn btn-ghost" id="docNewFolderBtn" style="flex:1">📁 Nuova cartella</button>
+    </div>
+    <div class="row mt8" id="docFolderRow" style="display:none">
+      <input id="docFolderName" placeholder="Nome cartella (es. Voli, Hotel…)">
+      <button class="btn btn-primary" id="docFolderOk" style="min-width:60px">OK</button>
+    </div>
+    <input type="file" id="docFileInput" multiple style="display:none">
+    <div class="row mt8">
+      <button class="btn btn-ghost" id="docExportBtn" style="flex:1">📦 Esporta struttura</button>
+      <button class="btn btn-ghost" id="docImportBtn" style="flex:1">📥 Importa struttura</button>
+    </div>
+    <input type="file" id="docImportFile" accept=".json,application/json" style="display:none">
+    <div class="small mt8" id="docXferStatus"></div>
+    <div class="small mt8" id="docTarget"></div>
+    <div class="small mt8">Tocca una cartella per selezionarla (caricamenti e nuove cartelle finiranno lì dentro) e per aprirla/chiuderla. Tocca un file per visualizzarlo.</div>
+    <div class="small mt8" id="docQuota"></div>
+  </div>
+
+  <div class="eyebrow">Archivio</div>
+  <div class="card">
+    <div class="row" style="margin-bottom:6px">
+      <button class="btn btn-ghost" id="docExpandAll" style="flex:1">▾ Espandi tutto</button>
+      <button class="btn btn-ghost" id="docCollapseAll" style="flex:1">▸ Chiudi tutto</button>
+    </div>
+    <div id="docTreeEl"></div>
+  </div>
+</section>
+
+<div id="docViewer" style="display:none;position:fixed;inset:0;background:rgba(22,52,58,.94);z-index:900;padding:14px;overflow:auto">
+  <div class="row">
+    <button class="btn btn-ghost" id="docViewerClose" style="flex:1">✕ Chiudi</button>
+    <a class="btn btn-primary" id="docViewerDown" style="flex:1;text-align:center;text-decoration:none" download>⬇ Scarica</a>
+  </div>
+  <div id="docViewerTitle" class="small mt8" style="color:#9CC6C9;text-align:center"></div>
+  <div id="docViewerBody" class="mt8" style="text-align:center"></div>
+</div>
+
+<!-- ================= STRUMENTI ================= -->
+<section class="view" id="view-strumenti">
+  <div class="eyebrow">Convertitore unità</div>
+  <div class="card">
+    <select id="unitType">
+      <option value="dist">Distanza · km ⇄ miglia</option>
+      <option value="peso">Peso · kg ⇄ libbre</option>
+      <option value="temp">Temperatura · °C ⇄ °F</option>
+      <option value="vel">Velocità · km/h ⇄ mph</option>
+    </select>
+    <div class="row mt8">
+      <input type="number" id="unitIn" inputmode="decimal" placeholder="Valore">
+      <button class="btn btn-ghost" id="unitDir" style="min-width:70px">→</button>
+    </div>
+    <div class="result-big" id="unitOut">—</div>
+  </div>
+
+  <div class="eyebrow">Mancia &amp; dividi il conto</div>
+  <div class="card">
+    <div class="row">
+      <input type="number" id="tipTotal" inputmode="decimal" placeholder="Totale conto">
+      <input type="number" id="tipPct" inputmode="numeric" placeholder="% mancia" value="10" style="max-width:90px">
+      <input type="number" id="tipPeople" inputmode="numeric" placeholder="Persone" value="2" style="max-width:90px">
+    </div>
+    <div class="result-big" id="tipOut">—</div>
+    <div class="small" id="tipDetail"></div>
+  </div>
+
+  <div class="eyebrow">Checklist bagaglio · personale, con voci di gruppo</div>
+  <div class="card">
+    <div class="row">
+      <input id="ckInput" placeholder="Aggiungi un oggetto…">
+      <button class="btn btn-primary" id="ckAdd">+</button>
+    </div>
+    <label class="row mt8" id="ckAllWrap" style="display:none;font-size:13px;color:var(--ink-soft)">
+      <input type="checkbox" id="ckAll" checked style="width:18px;height:18px;accent-color:var(--teal)"> Aggiungi per tutto il gruppo
+    </label>
+    <div class="row mt8">
+      <button class="btn btn-ghost" id="ckPreset" style="flex:1">Carica lista base</button>
+      <button class="btn btn-danger" id="ckReset" style="flex:1">Deseleziona tutto</button>
+    </div>
+    <div class="small mt8">Le spunte sono solo tue: ognuno segna quello che ha messo in valigia. ✕ toglie una voce solo dalla tua lista; chi l'ha creata può anche eliminarla per tutti (🗑).</div>
+    <div class="mt8" id="ckList"></div>
+  </div>
+
+  <div class="eyebrow">Note di viaggio</div>
+  <div class="card">
+    <textarea id="notes" rows="5" placeholder="Indirizzi, codici prenotazione, promemoria… (salvataggio automatico)"></textarea>
+    <div class="small mt8" id="notesStatus"></div>
+  </div>
+</section>
+
+<!-- ================= IMPOSTAZIONI ================= -->
+<section class="view" id="view-impostazioni">
+  <div class="eyebrow">I miei viaggi</div>
+  <div class="card">
+    <div class="row">
+      <input id="tripName" placeholder="Nome del viaggio corrente">
+      <button class="btn btn-primary" id="tripRename" style="min-width:88px">Rinomina</button>
+    </div>
+    <div class="row mt8">
+      <select id="tripSel" style="flex:1"></select>
+      <button class="btn btn-primary" id="tripOpen" style="min-width:60px">Apri</button>
+    </div>
+    <div class="row mt8">
+      <button class="btn btn-ghost" id="tripNew" style="flex:1">➕ Nuovo viaggio</button>
+      <button class="btn btn-danger" id="tripDel" style="flex:1">Elimina selezionato</button>
+    </div>
+    <div class="small mt8" id="tripInfo">Ogni viaggio ha eventi, budget, mappa, checklist, note e stanza di sincronizzazione propri. I Documenti (Docs) sono comuni a tutti i viaggi.</div>
+  </div>
+
+  <div class="eyebrow">Aspetto</div>
+  <div class="card">
+    <select id="themeSel">
+      <option value="auto">Tema automatico (segue il telefono)</option>
+      <option value="light">Sempre chiaro</option>
+      <option value="dark">Sempre scuro</option>
+    </select>
+  </div>
+
+  <div class="eyebrow">Backup completo</div>
+  <div class="card">
+    <div class="small">Salva in un unico file <b>tutti</b> i viaggi (eventi, spese, budget, mappe, checklist, note) e opzionalmente i documenti. Il ripristino sostituisce i dati sul dispositivo.</div>
+    <label class="row mt8" style="font-size:13px;color:var(--ink-soft)">
+      <input type="checkbox" id="bkDocs" style="width:18px;height:18px;accent-color:var(--teal)"> Includi documenti (file più pesante)
+    </label>
+    <div class="row mt8">
+      <button class="btn btn-primary" id="bkExport" style="flex:1">💾 Salva backup</button>
+      <button class="btn btn-ghost" id="bkImportBtn" style="flex:1">♻ Ripristina</button>
+    </div>
+    <input type="file" id="bkFile" accept=".json,application/json" style="display:none">
+    <div class="small mt8" id="bkStatus"></div>
+  </div>
+
+  <div class="eyebrow">Sincronizzazione live</div>
+  <div class="card">
+    <div class="small">Collega un database Firebase gratuito: eventi, checklist e punti mappa si aggiornano <b>in tempo reale</b> su tutti i telefoni che usano la stessa configurazione e lo stesso codice stanza.</div>
+    <textarea id="fbCfg" rows="4" class="mt8" placeholder="Incolla qui la configurazione Firebase (il blocco firebaseConfig = { ... })"></textarea>
+    <input id="fbRoom" class="mt8" placeholder="Codice stanza condiviso (es. viaggio-lisbona-2026)">
+    <input id="fbName" class="mt8" placeholder="Il tuo nome (per spese di gruppo e checklist)">
+    <div class="row mt8">
+      <button class="btn btn-primary" id="fbConnectBtn" style="flex:1">Attiva</button>
+      <button class="btn btn-danger" id="fbOffBtn" style="flex:1">Disattiva</button>
+    </div>
+    <div class="small mt8" id="fbStatus">Non attiva — i dati restano solo su questo telefono.</div>
+  </div>
+
+  <div class="eyebrow">Condivisione manuale</div>
+  <div class="card">
+    <div class="small">Alternativa senza database: invia eventi, checklist e punti mappa via messaggio. Chi riceve tocca «Importa» e incolla: i dati si uniscono ai suoi senza duplicati.</div>
+    <div class="row mt8">
+      <button class="btn btn-primary" id="syncExport" style="flex:1">📤 Esporta / condividi</button>
+      <button class="btn btn-ghost" id="syncImportBtn" style="flex:1">📥 Importa</button>
+    </div>
+    <div id="syncImportRow" class="mt8" style="display:none">
+      <textarea id="syncPaste" rows="3" placeholder="Incolla qui i dati ricevuti…"></textarea>
+      <button class="btn btn-primary mt8" id="syncImportApply" style="width:100%">Unisci ai miei dati</button>
+    </div>
+    <div class="small mt8" id="syncStatus"></div>
+  </div>
+</section>
+</main>
+
+<div id="undoBar" style="display:none;position:fixed;left:12px;right:12px;bottom:76px;z-index:800;background:var(--ink);color:#fff;border-radius:12px;padding:10px 14px;align-items:center;gap:10px;box-shadow:0 6px 20px rgba(0,0,0,.3)">
+  <span id="undoMsg" style="flex:1;font-size:13px"></span>
+  <button class="btn" id="undoBtn" style="background:var(--stamp);color:#16343A;padding:8px 14px">Annulla</button>
+</div>
+
+<nav class="tabs">
+  <button data-view="home" class="active"><span class="ic">🧮</span>Home</button>
+  <button data-view="eventi"><span class="ic">🗓️</span>Eventi</button>
+  <button data-view="budget"><span class="ic">💶</span>Budget</button>
+  <button data-view="mappa"><span class="ic">🗺️</span>Mappa</button>
+  <button data-view="docs"><span class="ic">📁</span>Docs</button>
+  <button data-view="strumenti"><span class="ic">🎒</span>Extra</button>
+</nav>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ============ STORAGE (Claude artifact → localStorage → memoria) ============ */
+const _mem = {};
+const store = {
+  async get(k){
+    try{ if(window.storage){ const r = await window.storage.get('viaggio:'+k); return r ? JSON.parse(r.value) : null; } }catch(e){}
+    try{ const v = localStorage.getItem('viaggio:'+k); if(v!==null) return JSON.parse(v); }catch(e){}
+    return _mem[k] ?? null;
+  },
+  async set(k,v){
+    const s = JSON.stringify(v);
+    try{ if(window.storage){ await window.storage.set('viaggio:'+k, s); return; } }catch(e){}
+    try{ localStorage.setItem('viaggio:'+k, s); return; }catch(e){}
+    _mem[k]=v;
+  }
+};
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ============ NAVIGAZIONE ============ */
+document.querySelectorAll('nav.tabs button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('view-'+b.dataset.view).classList.add('active');
+    if(b.dataset.view==='mappa') setTimeout(()=>{ if(map) map.invalidateSize(); }, 60);
+  });
+});
+document.getElementById('gearBtn').addEventListener('click', ()=>{
+  document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-impostazioni').classList.add('active');
+});
+document.getElementById('todayLabel').textContent =
+  new Date().toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'}).toUpperCase();
+
+/* ============ VALUTA ============ */
+const CURRENCIES = ['EUR','USD','GBP','CHF','JPY','THB','AED','TRY','AUD','CAD','MXN','BRL','IDR','VND','INR','CNY','KRW','SEK','NOK','DKK','PLN','CZK','HUF','ZAR','EGP','MAD'];
+const fxFrom = document.getElementById('fxFrom'), fxTo = document.getElementById('fxTo');
+CURRENCIES.forEach(c=>{ fxFrom.add(new Option(c,c)); fxTo.add(new Option(c,c)); });
+fxFrom.value='EUR'; fxTo.value='USD';
+let fxRates = null, fxDate = null, fxManual = null;
+
+function fxCompute(){
+  const amt = parseFloat(document.getElementById('fxAmount').value);
+  const out = document.getElementById('fxResult');
+  if(isNaN(amt)){ out.textContent='—'; return; }
+  let rate = null;
+  if(fxManual && fxManual.from===fxFrom.value && fxManual.to===fxTo.value) rate = fxManual.rate;
+  else if(fxRates){
+    const rf = fxFrom.value==='EUR'?1:fxRates[fxFrom.value];
+    const rt = fxTo.value==='EUR'?1:fxRates[fxTo.value];
+    if(rf && rt) rate = rt/rf;
+  }
+  if(rate===null){ out.textContent='Tasso non disponibile'; out.style.fontSize='15px'; return; }
+  out.style.fontSize='';
+  out.textContent = (amt*rate).toLocaleString('it-IT',{maximumFractionDigits:2}) + ' ' + fxTo.value;
+}
+function fxStatusMsg(){
+  const el = document.getElementById('fxStatus');
+  if(fxManual) el.innerHTML = '<span class="dot off"></span>Tasso manuale: 1 '+fxManual.from+' = '+fxManual.rate+' '+fxManual.to;
+  else if(fxRates) el.innerHTML = '<span class="dot ok"></span>Tassi BCE aggiornati al '+fxDate;
+  else el.innerHTML = '<span class="dot off"></span>Nessun tasso: premi Aggiorna (serve internet) o usa il tasso manuale.';
+}
+async function fxFetch(){
+  const el = document.getElementById('fxStatus');
+  el.innerHTML = '<span class="dot off"></span>Aggiornamento…';
+  try{
+    const r = await fetch('https://api.frankfurter.dev/v1/latest?base=EUR');
+    const d = await r.json();
+    fxRates = d.rates; fxDate = d.date; fxManual = null;
+    await store.set('fxRates', {rates:fxRates, date:fxDate});
+  }catch(e){
+    try{
+      const r2 = await fetch('https://open.er-api.com/v6/latest/EUR');
+      const d2 = await r2.json();
+      if(d2 && d2.rates){ fxRates=d2.rates; fxDate=new Date().toLocaleDateString('it-IT'); fxManual=null;
+        await store.set('fxRates',{rates:fxRates,date:fxDate}); }
+    }catch(e2){}
+  }
+  fxStatusMsg(); fxCompute();
+  if(typeof renderBudget==='function') renderBudget();
+}
+document.getElementById('fxRefresh').addEventListener('click', fxFetch);
+async function fxSaveSel(){
+  await store.set('fxSel', {from:fxFrom.value, to:fxTo.value, amount:document.getElementById('fxAmount').value});
+}
+document.getElementById('fxSwap').addEventListener('click', ()=>{
+  const t=fxFrom.value; fxFrom.value=fxTo.value; fxTo.value=t; fxManual=null; fxStatusMsg(); fxCompute(); fxSaveSel();
+});
+['fxAmount','fxFrom','fxTo'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{fxManual=null;fxStatusMsg();fxCompute();fxSaveSel();}));
+document.getElementById('fxManualBtn').addEventListener('click', ()=>{
+  const r=document.getElementById('fxManualRow'); r.style.display = r.style.display==='none'?'flex':'none';
+});
+document.getElementById('fxManualApply').addEventListener('click', ()=>{
+  const v=parseFloat(document.getElementById('fxManualRate').value);
+  if(!isNaN(v)&&v>0){ fxManual={from:fxFrom.value,to:fxTo.value,rate:v}; fxStatusMsg(); fxCompute(); }
+});
+
+/* ============ CALCOLATRICE ============ */
+const keys = ['C','(',')','÷','7','8','9','×','4','5','6','−','1','2','3','+','0','.','⌫','='];
+const grid = document.getElementById('calcGrid');
+let expr = '';
+keys.forEach(k=>{
+  const b=document.createElement('button');
+  b.textContent=k;
+  if('÷×−+'.includes(k)) b.className='op';
+  if(k==='=') b.className='eq';
+  b.addEventListener('click',()=>calcPress(k));
+  grid.appendChild(b);
+});
+function calcPress(k){
+  const out=document.getElementById('calcOut'), ex=document.getElementById('calcExpr');
+  if(k==='C'){ expr=''; out.textContent='0'; ex.innerHTML='&nbsp;'; return; }
+  if(k==='⌫'){ expr=expr.slice(0,-1); out.textContent=expr||'0'; return; }
+  if(k==='='){
+    try{
+      const js = expr.replace(/÷/g,'/').replace(/×/g,'*').replace(/−/g,'-');
+      if(!/^[\d+\-*/().\s]+$/.test(js)) throw 0;
+      const val = Function('"use strict";return('+js+')')();
+      if(!isFinite(val)) throw 0;
+      ex.textContent = expr + ' =';
+      out.textContent = parseFloat(val.toFixed(8)).toLocaleString('it-IT',{maximumFractionDigits:8});
+      expr = String(val);
+    }catch(e){ out.textContent='Errore'; expr=''; }
+    return;
+  }
+  expr+=k; out.textContent=expr;
+}
+
+/* ============ EVENTI & COUNTDOWN ============ */
+let events = [];
+async function loadEvents(){
+  events = (await store.get('events')) || [];
+  let fixed=false;
+  events.forEach(e=>{ if(!e.id){ e.id=uid(); fixed=true; } });
+  if(fixed) await store.set('events',events);
+  renderEvents();
+}
+async function saveEvents(){ await store.set('events', events); fbPush('events', events); renderEvents(); }
+function fmtDate(d){ return new Date(d).toLocaleString('it-IT',{weekday:'short',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function renderEvents(){
+  const now = Date.now();
+  const sorted = [...events].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const future = sorted.filter(e=>new Date(e.date)>now).slice(0,3);
+  const remain = d=>{
+    const ms = new Date(d)-now;
+    return { days:Math.floor(ms/86400000), hrs:Math.floor(ms%86400000/3600000),
+      min:Math.floor(ms%3600000/60000), totHrs:Math.floor(ms/3600000) };
+  };
+  const passHTML = e=>{
+    const r = remain(e.date);
+    return '<div class="pass"><div class="stub"><span class="n">'+r.days+'</span><span class="u">GIORNI</span></div>'+
+      '<div class="body"><h3>'+esc(e.name)+'</h3>'+
+      '<div class="meta">'+fmtDate(e.date)+(e.place?' · '+esc(e.place):'')+'</div>'+
+      '<div class="hm">⏱ '+r.days+' g · '+r.hrs+' h · '+r.min+' min — '+r.totHrs.toLocaleString('it-IT')+' ore totali</div>'+
+      (e.url?'<a class="lnk" target="_blank" rel="noopener" href="'+esc(e.url)+'">🔗 Apri link</a><button class="copybtn" data-copy="'+esc(e.url)+'">📋 Copia</button>':'')+
+      '</div></div>';
+  };
+  const cd = future.length ? future.map(passHTML).join('') : '<div class="empty">Nessun evento futuro. Aggiungine uno qui sotto ✈️</div>';
+  document.getElementById('countdowns').innerHTML = cd;
+  document.getElementById('homeCountdowns').innerHTML = cd;
+  if(typeof renderToday==='function') renderToday();
+  const list = document.getElementById('evList');
+  if(!sorted.length){ list.innerHTML='<div class="empty">Il calendario è vuoto.</div>'; return; }
+  list.innerHTML = sorted.map(e=>{
+    const past = new Date(e.date) < now;
+    const r = remain(e.date);
+    const when = past ? 'concluso' : 'tra '+r.days+' g '+r.hrs+' h';
+    return '<div class="item'+(past?' done':'')+'"><div><div class="t">'+esc(e.name)+'</div>'+
+      '<div class="s">'+fmtDate(e.date)+(e.place?' · '+esc(e.place):'')+' · '+when+'</div>'+
+      (e.url?'<a class="lnk" target="_blank" rel="noopener" href="'+esc(e.url)+'">🔗 Apri link</a><button class="copybtn" data-copy="'+esc(e.url)+'">📋</button>':'')+
+      '</div><div class="acts">'+
+      '<button class="icon-btn" data-edit-ev="'+e.id+'" title="Modifica">✎</button>'+
+      '<button class="icon-btn del" data-del-ev="'+e.id+'" title="Elimina">✕</button></div></div>';
+  }).join('');
+}
+document.getElementById('evList').addEventListener('click', async ev=>{
+  const del = ev.target.closest('[data-del-ev]');
+  if(del){
+    const id = String(del.dataset.delEv);
+    if(String(editingEvId)===id) evResetForm();
+    const removed = events.find(x=>String(x.id)===id);
+    events = events.filter(x=>String(x.id)!==id);
+    if(fb.on){ try{ R('events/'+id).remove(); }catch(e){} }
+    await saveEvents();
+    if(removed) showUndo('Evento «'+removed.name+'» eliminato', async ()=>{ events.push(removed); await saveEvents(); });
+    return;
+  }
+  const ed = ev.target.closest('[data-edit-ev]');
+  if(ed) evStartEdit(ed.dataset.editEv);
+});
+let editingEvId = null;
+function evResetForm(){
+  editingEvId = null;
+  ['evName','evDate','evPlace','evUrl'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('evAdd').textContent = '+ Aggiungi al calendario';
+  document.getElementById('evCancelEdit').style.display = 'none';
+}
+function evStartEdit(id){
+  const e = events.find(x=>x.id===id); if(!e) return;
+  editingEvId = id;
+  document.getElementById('evName').value = e.name;
+  document.getElementById('evDate').value = e.date;
+  document.getElementById('evPlace').value = e.place || '';
+  document.getElementById('evUrl').value = e.url || '';
+  document.getElementById('evAdd').textContent = '💾 Salva modifiche';
+  document.getElementById('evCancelEdit').style.display = 'block';
+  document.getElementById('evName').scrollIntoView({behavior:'smooth', block:'center'});
+  document.getElementById('evName').focus();
+}
+document.getElementById('evCancelEdit').addEventListener('click', evResetForm);
+document.getElementById('evAdd').addEventListener('click', async ()=>{
+  const name = document.getElementById('evName').value.trim();
+  const date = document.getElementById('evDate').value;
+  if(!name || !date) return;
+  let url = document.getElementById('evUrl').value.trim();
+  if(url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+  const place = document.getElementById('evPlace').value.trim();
+  if(editingEvId){
+    const e = events.find(x=>x.id===editingEvId);
+    if(e){ e.name=name; e.date=date; e.place=place; e.url=url; }
+  }else{
+    events.push({id:uid(), name, date, place, url});
+  }
+  evResetForm();
+  await saveEvents();
+});
+document.addEventListener('click', async ev=>{
+  const b = ev.target.closest('[data-copy]');
+  if(!b) return;
+  const url = b.dataset.copy;
+  const orig = b.textContent;
+  try{ await navigator.clipboard.writeText(url); b.textContent='✓ Copiato'; }
+  catch(e){ prompt('Copia il link:', url); b.textContent=orig; return; }
+  setTimeout(()=>{ b.textContent=orig; }, 1500);
+});
+
+setInterval(()=>{ renderEvents(); if(typeof renderBudget==='function') renderBudget(); }, 60000);
+
+/* ============ MAPPA & POI ============ */
+let map=null, markers={}, pois=[], pendingLatLng=null;
+function initMap(){
+  try{
+    map = L.map('map',{zoomControl:true}).setView([45.55,9.21],5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      maxZoom:19, attribution:'© OpenStreetMap'
+    }).addTo(map);
+    map.on('click', e=>{
+      pendingLatLng = e.latlng;
+      document.getElementById('poiCoords').textContent =
+        'Posizione: '+e.latlng.lat.toFixed(5)+', '+e.latlng.lng.toFixed(5);
+      document.getElementById('poiFormCard').style.display='block';
+      // riconosco cosa c'è nel punto toccato (luogo noto o indirizzo)
+      fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=it&lat='+e.latlng.lat+'&lon='+e.latlng.lng)
+        .then(r=>r.json()).then(d=>{
+          if(!d) return;
+          const a = d.address||{};
+          const nome = d.name || a.tourism || a.amenity || a.shop || a.building ||
+            ((a.road||'')+(a.house_number?' '+a.house_number:'')) || (d.display_name||'').split(',')[0];
+          const zona = [a.suburb||a.village||a.town||a.city, a.country].filter(Boolean).join(', ');
+          if(nome && !document.getElementById('poiName').value) document.getElementById('poiName').value = nome;
+          if(nome) document.getElementById('poiCoords').textContent = '📍 '+nome+(zona?' — '+zona:'');
+        }).catch(()=>{});
+      document.getElementById('poiName').focus();
+    });
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],11),()=>{},{timeout:4000});
+    }
+  }catch(e){
+    document.getElementById('map').innerHTML =
+      '<div class="empty" style="margin:12px">La mappa non è disponibile in questa anteprima.<br>Apri il file sul telefono per vederla; l\'elenco dei punti funziona comunque.</div>';
+  }
+}
+function poiIcon(p){
+  return L.divIcon({className:'', html:'<div style="font-size:26px;line-height:1">'+(p.visited?'✅':'📍')+'</div>', iconSize:[26,26], iconAnchor:[13,26]});
+}
+function renderPois(){
+  const list = document.getElementById('poiList');
+  if(!pois.length){ list.innerHTML='<div class="empty">Nessun punto salvato. Tocca la mappa per iniziare.</div>'; }
+  else{
+    list.innerHTML = pois.map(p=>
+      '<div class="item'+(p.visited?' done':'')+'"><div><div class="t">'+esc(p.name)+' <span class="badge">'+esc(p.cat)+'</span></div>'+
+      '<div class="s">'+p.lat.toFixed(4)+', '+p.lng.toFixed(4)+'</div></div>'+
+      '<div class="acts">'+
+      '<a class="icon-btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'" title="Apri in Google Maps">🧭</a>'+
+      '<button class="icon-btn" data-edit-poi="'+p.id+'" title="Modifica">✎</button>'+
+      '<button class="icon-btn" data-vis="'+p.id+'" title="Visitato / da visitare">'+(p.visited?'↩':'✓')+'</button>'+
+      '<button class="icon-btn del" data-del-poi="'+p.id+'" title="Elimina">✕</button></div></div>'
+    ).join('');
+    list.querySelectorAll('[data-vis]').forEach(b=>b.addEventListener('click',async()=>{
+      const p=pois.find(x=>x.id===b.dataset.vis); p.visited=!p.visited; await savePois();
+    }));
+    list.querySelectorAll('[data-edit-poi]').forEach(b=>b.addEventListener('click',()=>{
+      const p=pois.find(x=>x.id===b.dataset.editPoi); if(!p) return;
+      poiEditingId = p.id;
+      pendingLatLng = {lat:p.lat, lng:p.lng};
+      document.getElementById('poiName').value = p.name;
+      document.getElementById('poiCat').value = p.cat;
+      document.getElementById('poiCoords').textContent = 'Modifica punto: '+p.lat.toFixed(5)+', '+p.lng.toFixed(5);
+      document.getElementById('poiFormCard').style.display = 'block';
+      if(map) map.setView([p.lat,p.lng], 15);
+      document.getElementById('poiName').focus();
+    }));
+    list.querySelectorAll('[data-del-poi]').forEach(b=>b.addEventListener('click',async()=>{
+      const removed = pois.find(x=>x.id===b.dataset.delPoi);
+      pois = pois.filter(x=>x.id!==b.dataset.delPoi);
+      await savePois();
+      if(removed) showUndo('Punto «'+removed.name+'» eliminato', async ()=>{ pois.push(removed); await savePois(); });
+    }));
+  }
+  if(map){
+    Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
+    pois.forEach(p=>{
+      markers[p.id] = L.marker([p.lat,p.lng],{icon:poiIcon(p)}).addTo(map)
+        .bindPopup('<b>'+esc(p.name)+'</b><br>'+esc(p.cat));
+    });
+  }
+}
+async function savePois(){ await store.set('pois', pois); fbPush('pois', pois); renderPois(); }
+let poiEditingId = null;
+document.getElementById('poiSave').addEventListener('click', async ()=>{
+  const name = document.getElementById('poiName').value.trim();
+  if(!name || !pendingLatLng) return;
+  if(poiEditingId){
+    const p = pois.find(x=>x.id===poiEditingId);
+    if(p){ p.name = name; p.cat = document.getElementById('poiCat').value; }
+    poiEditingId = null;
+  }else{
+    pois.push({id:uid(), name, cat:document.getElementById('poiCat').value,
+      lat:pendingLatLng.lat, lng:pendingLatLng.lng, visited:false});
+  }
+  document.getElementById('poiName').value='';
+  document.getElementById('poiFormCard').style.display='none';
+  pendingLatLng=null;
+  if(searchMarker && map){ map.removeLayer(searchMarker); searchMarker=null; }
+  await savePois();
+});
+document.getElementById('poiCancel').addEventListener('click', ()=>{
+  document.getElementById('poiFormCard').style.display='none'; pendingLatLng=null; poiEditingId=null;
+  if(searchMarker && map){ map.removeLayer(searchMarker); searchMarker=null; }
+});
+
+/* ---- ricerca luoghi (OpenStreetMap Nominatim, fallback Photon) ---- */
+let searchMarker = null;
+function mapPick(lat, lng, name){
+  document.getElementById('mapResults').style.display = 'none';
+  pendingLatLng = {lat, lng};
+  document.getElementById('poiCoords').textContent = 'Posizione: '+lat.toFixed(5)+', '+lng.toFixed(5);
+  document.getElementById('poiName').value = name || '';
+  document.getElementById('poiFormCard').style.display = 'block';
+  if(!name){ // coordinate senza nome: provo a riconoscere il luogo
+    fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=it&lat='+lat+'&lon='+lng)
+      .then(r=>r.json()).then(d=>{
+        const nm = d && (d.name || (d.display_name||'').split(',')[0]);
+        if(nm && !document.getElementById('poiName').value) document.getElementById('poiName').value = nm;
+        if(nm) document.getElementById('poiCoords').textContent = '📍 '+nm;
+      }).catch(()=>{});
+  }
+  if(map){
+    map.setView([lat,lng], 16);
+    if(searchMarker) map.removeLayer(searchMarker);
+    searchMarker = L.marker([lat,lng],{icon:L.divIcon({className:'',html:'<div style="font-size:26px;line-height:1">🔍</div>',iconSize:[26,26],iconAnchor:[13,26]})}).addTo(map);
+  }
+}
+function mapShowResults(items){
+  const box = document.getElementById('mapResults');
+  if(!items.length){ box.innerHTML = '<div class="empty">Nessun risultato: prova ad aggiungere la città (es. «duomo Milano»).</div>'; box.style.display='block'; return; }
+  box.innerHTML = items.map((r,i)=>
+    '<div class="item" style="cursor:pointer" data-res="'+i+'"><div><div class="t">'+esc(r.name)+'</div>'+
+    '<div class="s">'+esc(r.detail)+'</div></div><div class="acts"><span class="badge">scegli</span></div></div>'
+  ).join('');
+  box.style.display = 'block';
+  box.querySelectorAll('[data-res]').forEach(el=>el.addEventListener('click', ()=>{
+    const r = items[parseInt(el.dataset.res)];
+    mapPick(r.lat, r.lng, r.name);
+  }));
+}
+function normQuery(q){
+  return q
+    .replace(/〒\s*\d{3}[-−–]?\d{4}/g, '')          // CAP giapponese 〒169-0073
+    .replace(/[−–‐]/g, '-')                          // trattini speciali di Google
+    .replace(/\b(giappone|japan|italia|italy)\b,?/gi, '') // nome paese ridondante
+    .replace(/\s{2,}/g, ' ')
+    .replace(/(^[,\s]+|[,\s]+$)/g, '')
+    .trim();
+}
+function queryVariants(q){
+  const v = [q];
+  const n = normQuery(q);
+  if(n && n!==q) v.push(n);
+  // variante senza il nome del palazzo in caratteri CJK alla fine (es. 尚美ビルⅡ), tenendo il civico
+  const noBld = n.replace(/[\u2160-\u217F\u3000-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]+\s*$/,'').trim().replace(/,$/,'');
+  if(noBld && noBld!==n) v.push(noBld);
+  // tolgo progressivamente gli ultimi segmenti (di solito nome del palazzo, piano, ecc.)
+  let parts = (noBld||n).split(',').map(s=>s.trim()).filter(Boolean);
+  while(parts.length > 2){
+    parts = parts.slice(0, -1);
+    v.push(parts.join(', '));
+  }
+  return [...new Set(v)];
+}
+async function nominatimSearch(q){
+  try{
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=7&addressdetails=1&accept-language=it&q='+encodeURIComponent(q));
+    const d = await r.json();
+    return d.map(x=>({
+      name: x.name || x.display_name.split(',')[0],
+      detail: x.display_name.split(',').slice(1,4).join(',').trim() || x.type,
+      lat: parseFloat(x.lat), lng: parseFloat(x.lon)
+    }));
+  }catch(e){ return null; }
+}
+async function mapDoSearch(){
+  const q = document.getElementById('mapSearch').value.trim();
+  if(!q) return;
+  const box = document.getElementById('mapResults');
+  box.innerHTML = '<div class="empty">Ricerca in corso…</div>'; box.style.display='block';
+
+  // coordinate GPS o link di Google Maps incollati? vado dritto al punto
+  const coordM = q.match(/(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/) || q.match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/);
+  if(coordM){
+    mapPick(parseFloat(coordM[1]), parseFloat(coordM[2]), '');
+    return;
+  }
+
+  let items = [], usedVariant = null, offline = true;
+  for(const variant of queryVariants(q)){
+    let res = await nominatimSearch(variant);
+    if(res===null) res = await photonSearch(variant);
+    if(res!==null){
+      offline = false;
+      if(res.length){ items = res; usedVariant = variant; break; }
+    }
+  }
+  if(offline){
+    box.innerHTML = '<div class="empty">Ricerca non disponibile: controlla la connessione (non funziona nell\'anteprima Claude, solo sul telefono).</div>';
+    return;
+  }
+  mapShowResults(items);
+  if(items.length && usedVariant && usedVariant !== q){
+    box.insertAdjacentHTML('afterbegin',
+      '<div class="small" style="padding:4px 2px 8px;border-bottom:1px dashed var(--line);margin-bottom:4px">Indirizzo semplificato per la ricerca: «'+esc(usedVariant)+'» — scegli il risultato più vicino, poi affina toccando la mappa.</div>');
+  }
+}
+async function photonSearch(q){
+  try{
+    let url = 'https://photon.komoot.io/api/?limit=6&lang=it&q='+encodeURIComponent(q);
+    if(map){ const c = map.getCenter(); url += '&lat='+c.lat+'&lon='+c.lng; }
+    const r = await fetch(url);
+    const d = await r.json();
+    return (d.features||[]).map(f=>{
+      const p = f.properties;
+      const via = [p.street, p.housenumber].filter(Boolean).join(' ');
+      return {
+        name: p.name || via || q,
+        detail: [via && p.name ? via : null, p.city || p.county, p.country].filter(Boolean).join(', '),
+        lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0]
+      };
+    });
+  }catch(e){ return null; }
+}
+/* suggerimenti automatici mentre digiti (come Maps) */
+let acTimer = null;
+document.getElementById('mapSearch').addEventListener('input', ()=>{
+  clearTimeout(acTimer);
+  const q = document.getElementById('mapSearch').value.trim();
+  if(q.length < 3){ document.getElementById('mapResults').style.display='none'; return; }
+  acTimer = setTimeout(async ()=>{
+    const items = await photonSearch(q);
+    if(items && items.length) mapShowResults(items);
+  }, 350);
+});
+document.getElementById('mapSearchBtn').addEventListener('click', mapDoSearch);
+document.getElementById('mapSearch').addEventListener('keydown', e=>{ if(e.key==='Enter'){ clearTimeout(acTimer); mapDoSearch(); } });
+
+/* ============ STRUMENTI ============ */
+const unitFns = {
+  dist:{fwd:v=>v*0.621371, bwd:v=>v/0.621371, a:'km', b:'mi'},
+  peso:{fwd:v=>v*2.20462, bwd:v=>v/2.20462, a:'kg', b:'lb'},
+  temp:{fwd:v=>v*9/5+32, bwd:v=>(v-32)*5/9, a:'°C', b:'°F'},
+  vel:{fwd:v=>v*0.621371, bwd:v=>v/0.621371, a:'km/h', b:'mph'}
+};
+let unitForward = true;
+function unitCompute(){
+  const t = unitFns[document.getElementById('unitType').value];
+  const v = parseFloat(document.getElementById('unitIn').value);
+  const dirBtn = document.getElementById('unitDir');
+  dirBtn.textContent = unitForward ? t.a+' → '+t.b : t.b+' → '+t.a;
+  const out = document.getElementById('unitOut');
+  if(isNaN(v)){ out.textContent='—'; return; }
+  const r = unitForward ? t.fwd(v) : t.bwd(v);
+  out.textContent = r.toLocaleString('it-IT',{maximumFractionDigits:2})+' '+(unitForward?t.b:t.a);
+}
+document.getElementById('unitDir').addEventListener('click',()=>{unitForward=!unitForward;unitCompute();});
+['unitType','unitIn'].forEach(id=>document.getElementById(id).addEventListener('input',unitCompute));
+unitCompute();
+
+function tipCompute(){
+  const tot=parseFloat(document.getElementById('tipTotal').value);
+  const pct=parseFloat(document.getElementById('tipPct').value)||0;
+  const ppl=Math.max(1,parseInt(document.getElementById('tipPeople').value)||1);
+  const out=document.getElementById('tipOut'), det=document.getElementById('tipDetail');
+  if(isNaN(tot)){out.textContent='—';det.textContent='';return;}
+  const full=tot*(1+pct/100);
+  out.textContent=(full/ppl).toLocaleString('it-IT',{maximumFractionDigits:2})+' a testa';
+  det.textContent='Totale con mancia: '+full.toLocaleString('it-IT',{maximumFractionDigits:2})+' (mancia '+ (tot*pct/100).toLocaleString('it-IT',{maximumFractionDigits:2})+')';
+}
+['tipTotal','tipPct','tipPeople'].forEach(id=>document.getElementById(id).addEventListener('input',tipCompute));
+
+/* ---- Checklist: voci di gruppo condivise, spunte e rimozioni personali ---- */
+let ckPersonal=[];      // voci solo mie {id,text,done}
+let ckShared=[];        // voci di gruppo dal database {id,text,by}
+let ckChecks={};        // le MIE spunte sulle voci di gruppo {id:true}
+let ckHidden=[];        // voci di gruppo rimosse solo dalla mia lista [id]
+const CK_PRESET=['Passaporto / carta d\'identità','Biglietti e prenotazioni','Caricabatterie e powerbank','Adattatore prese','Medicinali','Spazzolino e trousse','Occhiali da sole','Contanti / carte','Assicurazione viaggio','Auricolari'];
+async function saveCk(){
+  await store.set('ckPersonal', ckPersonal);
+  await store.set('ckChecks', ckChecks);
+  await store.set('ckHidden', ckHidden);
+  renderCk();
+}
+function ckAllTexts(){
+  return [...ckShared.map(c=>c.text), ...ckPersonal.map(c=>c.text)];
+}
+function ckAddItem(text){
+  const forAll = fb.on && document.getElementById('ckAll').checked;
+  if(ckAllTexts().includes(text)) return;
+  if(forAll){
+    const c = {id:uid(), text, by:userName||'Io'};
+    try{ R('checklist/'+c.id).set(c); }catch(e){}
+  }else{
+    ckPersonal.push({id:uid(), text, done:false});
+  }
+}
+function renderCk(){
+  const el = document.getElementById('ckList');
+  const rows = [];
+  if(fb.on){
+    ckShared.filter(c=>!ckHidden.includes(String(c.id))).forEach(c=>
+      rows.push({id:c.id, text:c.text, by:c.by, scope:'tutti', done:!!ckChecks[c.id]}));
+  }
+  ckPersonal.forEach(c=>rows.push({id:c.id, text:c.text, scope:'mio', done:!!c.done}));
+  if(!rows.length){ el.innerHTML='<div class="empty">Lista vuota. Aggiungi oggetti o carica la lista base.</div>'; return; }
+  el.innerHTML = rows.map(c=>
+    '<div class="check'+(c.done?' done':'')+'">'+
+    '<input type="checkbox" '+(c.done?'checked':'')+' data-ck="'+c.id+'" data-scope="'+c.scope+'">'+
+    '<div style="flex:1"><div class="t">'+esc(c.text)+'</div>'+
+    (c.scope==='tutti'?'<div class="s" style="font-size:11px;color:var(--ink-soft);font-family:var(--mono)">tutti · di '+esc(c.by||'?')+'</div>':'')+
+    '</div>'+
+    (c.scope==='tutti' && c.by===userName ? '<button class="icon-btn del" data-ck-rmall="'+c.id+'" title="Elimina per tutti">🗑</button>' : '')+
+    '<button class="icon-btn del" data-ck-rm="'+c.id+'" data-scope="'+c.scope+'" title="Togli solo dalla mia lista">✕</button>'+
+    '</div>'
+  ).join('');
+}
+document.getElementById('ckList').addEventListener('change', async ev=>{
+  const x = ev.target.closest('[data-ck]'); if(!x) return;
+  const id = String(x.dataset.ck);
+  if(x.dataset.scope==='tutti'){
+    if(x.checked) ckChecks[id]=true; else delete ckChecks[id];
+  }else{
+    const c = ckPersonal.find(i=>String(i.id)===id); if(c) c.done = x.checked;
+  }
+  await saveCk();
+});
+document.getElementById('ckList').addEventListener('click', async ev=>{
+  const rmAll = ev.target.closest('[data-ck-rmall]');
+  if(rmAll){
+    const id = String(rmAll.dataset.ckRmall);
+    if(fb.on){ try{ R('checklist/'+id).remove(); }catch(e){} }
+    delete ckChecks[id];
+    await saveCk();
+    return;
+  }
+  const rm = ev.target.closest('[data-ck-rm]');
+  if(!rm) return;
+  const id = String(rm.dataset.ckRm);
+  if(rm.dataset.scope==='tutti'){
+    if(!ckHidden.includes(id)) ckHidden.push(id);   // sparisce solo per me
+    delete ckChecks[id];
+  }else{
+    ckPersonal = ckPersonal.filter(i=>String(i.id)!==id);
+  }
+  await saveCk();
+});
+document.getElementById('ckAdd').addEventListener('click', async ()=>{
+  const v = document.getElementById('ckInput').value.trim(); if(!v) return;
+  ckAddItem(v);
+  document.getElementById('ckInput').value='';
+  await saveCk();
+});
+document.getElementById('ckInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('ckAdd').click();});
+document.getElementById('ckPreset').addEventListener('click', async ()=>{
+  CK_PRESET.forEach(t=>ckAddItem(t));
+  await saveCk();
+});
+document.getElementById('ckReset').addEventListener('click', async ()=>{
+  ckChecks = {};
+  ckPersonal.forEach(c=>c.done=false);
+  await saveCk();
+});
+
+/* ---- Condividi & sincronizza ---- */
+document.getElementById('syncExport').addEventListener('click', async ()=>{
+  const payload = JSON.stringify({v:1, events, pois, checklist: ckPersonal});
+  const st = document.getElementById('syncStatus');
+  if(navigator.share){
+    try{ await navigator.share({title:'Dati Compagno di Viaggio', text:payload}); st.textContent='Condiviso ✓'; return; }catch(e){}
+  }
+  try{ await navigator.clipboard.writeText(payload); st.textContent='Copiato negli appunti ✓ — incollalo in un messaggio.'; }
+  catch(e){
+    document.getElementById('syncImportRow').style.display='block';
+    document.getElementById('syncPaste').value=payload;
+    st.textContent='Copia manualmente il testo qui sopra.';
+  }
+});
+document.getElementById('syncImportBtn').addEventListener('click', ()=>{
+  const r=document.getElementById('syncImportRow');
+  r.style.display = r.style.display==='none'?'block':'none';
+});
+document.getElementById('syncImportApply').addEventListener('click', async ()=>{
+  const st = document.getElementById('syncStatus');
+  try{
+    const d = JSON.parse(document.getElementById('syncPaste').value.trim());
+    let added = 0;
+    (d.events||[]).forEach(e=>{ if(e&&e.id&&!events.some(x=>x.id===e.id)){ events.push(e); added++; } });
+    (d.pois||[]).forEach(p=>{ if(p&&p.id&&!pois.some(x=>x.id===p.id)){ pois.push(p); added++; } });
+    (d.checklist||[]).forEach(c=>{ if(c&&c.text&&!ckAllTexts().includes(c.text)){ ckPersonal.push({id:c.id||uid(), text:c.text, done:false}); added++; } });
+    await saveEvents(); await savePois(); await saveCk();
+    document.getElementById('syncPaste').value='';
+    document.getElementById('syncImportRow').style.display='none';
+    st.textContent = added ? 'Importati '+added+' elementi ✓' : 'Nessun elemento nuovo: era già tutto presente.';
+  }catch(e){ st.textContent='Dati non validi: incolla esattamente il testo esportato.'; }
+});
+
+/* ---- Sincronizzazione live (Firebase Realtime Database) ---- */
+const fb = { on:false, code:null };
+const fbStatus = (msg)=>{ document.getElementById('fbStatus').textContent = msg; };
+function fbLoad(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+async function fbLoadSDK(){
+  if(window.firebase && firebase.database) return true;
+  try{
+    await fbLoad('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+    await fbLoad('https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js');
+    return true;
+  }catch(e){ return false; }
+}
+function fbParseCfg(txt){
+  const m = txt.match(/\{[\s\S]*\}/);
+  if(!m) return null;
+  try{ return Function('"use strict";return('+m[0]+')')(); }catch(e){ return null; }
+}
+const R = p => firebase.database().ref('rooms/'+fb.code+'/'+p);
+function fbPush(coll, arr){
+  if(!fb.on) return;
+  try{ R(coll).set(Object.fromEntries(arr.filter(x=>x&&x.id).map(x=>[x.id,x]))); }catch(e){}
+}
+async function fbConnect(cfgText, room, silent){
+  const code = room.trim().toLowerCase().replace(/\s+/g,'-').replace(/[.#$\[\]\/]/g,'');
+  const cfg = fbParseCfg(cfgText);
+  if(!cfg || !cfg.apiKey){ fbStatus('Configurazione non valida: incolla tutto il blocco firebaseConfig = { … }.'); return; }
+  if(!code){ fbStatus('Scegli un codice stanza e condividilo con gli altri.'); return; }
+  if(!cfg.databaseURL){
+    fbStatus('Nella configurazione manca "databaseURL": crea prima il Realtime Database su Firebase e ricopia la configurazione.');
+    return;
+  }
+  fbStatus('Connessione…');
+  if(!(await fbLoadSDK())){ fbStatus('Impossibile caricare Firebase: controlla la connessione (non funziona nell\'anteprima Claude, solo sul telefono).'); return; }
+  try{
+    if(!firebase.apps.length) firebase.initializeApp(cfg);
+    fb.code = code;
+    // unione iniziale: aggiungo al database gli elementi locali che mancano (la checklist personale resta personale)
+    for(const [coll, arr] of [['events',events],['pois',pois]]){
+      const remote = (await R(coll).once('value')).val() || {};
+      arr.forEach(x=>{ if(x&&x.id&&!remote[x.id]) remote[x.id]=x; });
+      await R(coll).set(remote);
+    }
+    // ascolto in tempo reale: il database è la fonte di verità
+    R('events').on('value', async s=>{ events = Object.values(s.val()||{}); await store.set('events',events); renderEvents(); });
+    R('pois').on('value', async s=>{ pois = Object.values(s.val()||{}); await store.set('pois',pois); renderPois(); });
+    R('checklist').on('value', async s=>{ ckShared = Object.values(s.val()||{}); await store.set('ckShared',ckShared); renderCk(); });
+    R('spese').on('value', s=>{ groupExpenses = Object.values(s.val()||{}); renderGroup(); });
+    fb.on = true;
+    userName = document.getElementById('fbName').value.trim() || userName || 'Io';
+    await store.set('userName', userName);
+    document.getElementById('bgSharedWrap').style.display = 'flex';
+    document.getElementById('ckAllWrap').style.display = 'flex';
+    document.getElementById('liveBadge').classList.add('on');
+    await store.set('fbConf', {cfgText, room:code});
+    fbStatus('Attiva ✓ — stanza «'+code+'». Tutti quelli con questa configurazione e questo codice vedono gli stessi dati.');
+  }catch(e){
+    fbStatus('Errore di connessione: '+(e && e.message ? e.message : 'riprova.'));
+    if(!silent) console.error(e);
+  }
+}
+document.getElementById('fbConnectBtn').addEventListener('click', ()=>{
+  fbConnect(document.getElementById('fbCfg').value, document.getElementById('fbRoom').value);
+});
+document.getElementById('fbOffBtn').addEventListener('click', async ()=>{
+  if(fb.on){ try{ ['events','pois','checklist','spese'].forEach(c=>R(c).off()); }catch(e){} }
+  fb.on = false;
+  groupExpenses = [];
+  document.getElementById('bgSharedWrap').style.display = 'none';
+  document.getElementById('ckAllWrap').style.display = 'none';
+  document.getElementById('liveBadge').classList.remove('on');
+  await store.set('fbConf', null);
+  renderGroup(); renderCk();
+  fbStatus('Disattivata: i dati restano solo su questo telefono (quelli già scaricati rimangono).');
+});
+
+/* ============ BUDGET (personale, con gruppo opzionale) ============ */
+const BG_CATS = ['🍝 Cibo','🚆 Trasporti','🏨 Alloggio','🎟️ Attività','🛍️ Shopping','📦 Altro'];
+BG_CATS.forEach(c=>{ document.getElementById('qCat').add(new Option(c,c)); document.getElementById('bgCat').add(new Option(c,c)); });
+let expenses=[], budgetTotal=0, groupExpenses=[], userName='';
+let tripCur='USD', tripStart='', tripEnd='';
+const bgCurSel = document.getElementById('bgCur');
+CURRENCIES.filter(c=>c!=='EUR').forEach(c=>bgCurSel.add(new Option(c,c)));
+const eur = v => v.toLocaleString('it-IT',{maximumFractionDigits:2})+' €';
+const fmtCur = (v,c) => v.toLocaleString('it-IT',{maximumFractionDigits:2})+' '+c;
+function tripRate(){ // 1 EUR = ? valuta viaggio
+  if(tripCur==='EUR') return 1;
+  return (fxRates && fxRates[tripCur]) ? fxRates[tripCur] : null;
+}
+function both(vEur){ // importo in entrambe le valute
+  const r = tripRate();
+  return eur(vEur) + (r && tripCur!=='EUR' ? ' · '+fmtCur(vEur*r, tripCur) : '');
+}
+function tripDays(){
+  if(!tripStart || !tripEnd) return 0;
+  const d = Math.round((new Date(tripEnd) - new Date(tripStart))/86400000) + 1;
+  return d>0 ? d : 0;
+}
+
+async function saveBudget(){
+  await store.set('expenses', expenses);
+  await store.set('budgetTotal', budgetTotal);
+  await store.set('tripConf', {cur:tripCur, start:tripStart, end:tripEnd, dest:tripDest});
+  renderBudget();
+}
+function addExpense(rawAmt, mode, cat, note, shared, dateStr){
+  let amtEur = rawAmt, orig = null;
+  if(mode==='trip' && tripCur!=='EUR'){
+    const r = tripRate();
+    if(!r){ alert('Tasso di cambio non disponibile: aggiorna i tassi in Home o inserisci in EUR.'); return false; }
+    amtEur = rawAmt / r;
+    orig = {amt:rawAmt, cur:tripCur};
+  }
+  const today = new Date().toISOString().slice(0,10);
+  const date = (dateStr && dateStr!==today) ? dateStr+'T12:00:00' : new Date().toISOString();
+  const e = {id:uid(), amt:amtEur, orig, cat, note:note||'', date, by:userName||'Io', shared:!!shared};
+  expenses.push(e);
+  if(shared && fb.on){ try{ R('spese/'+e.id).set(e); }catch(err){} }
+  saveBudget();
+  return true;
+}
+function bgChartSVG(){
+  if(!expenses.length) return '<div class="empty">Nessuna spesa registrata: i grafici appariranno qui.</div>';
+  const byDay = {};
+  [...expenses].sort((a,b)=>a.date<b.date?-1:1).forEach(e=>{
+    const d = e.date.slice(0,10); byDay[d] = (byDay[d]||0) + e.amt;
+  });
+  const days = Object.keys(byDay).sort();
+  const show = days.slice(-14);
+  let cum = days.slice(0, days.length-show.length).reduce((s,d)=>s+byDay[d],0);
+  const pts = show.map(d=>{ cum += byDay[d]; return {d, day:byDay[d], cum}; });
+  const daysN = tripDays();
+  const baseDaily = (budgetTotal>0 && daysN>0) ? budgetTotal/daysN : 0;
+  const W=210, H=150, padL=6, padB=18, padT=12, cw=(W-padL*2)/pts.length;
+  const lbl = i => (pts.length<=7 || i%2===0);
+  const mkY = maxY => (v => H-padB - (v/maxY)*(H-padB-padT));
+  const xAxis = () => pts.map((p,i)=> lbl(i)?'<text x="'+(padL+i*cw+cw/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="#4A6468">'+p.d.slice(8,10)+'/'+p.d.slice(5,7)+'</text>':'').join('');
+
+  // --- complessivo: barre cumulate + linea budget ---
+  const maxA = Math.max(budgetTotal||0, pts[pts.length-1].cum) * 1.1 || 1;
+  const yA = mkY(maxA);
+  let svgA = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  pts.forEach((p,i)=>{
+    const x = padL+i*cw;
+    svgA += '<rect x="'+(x+cw*0.16)+'" y="'+yA(p.cum)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yA(p.cum))+'" rx="2" fill="'+(budgetTotal>0&&p.cum>budgetTotal?'#E4573D':'#2E6E6A')+'" opacity="0.9"/>';
+  });
+  if(budgetTotal>0) svgA += '<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yA(budgetTotal)+'" y2="'+yA(budgetTotal)+'" stroke="#D9A441" stroke-width="1.5" stroke-dasharray="5 4"/>'+
+    '<text x="'+(W-padL)+'" y="'+(yA(budgetTotal)-3)+'" text-anchor="end" font-size="8" font-family="monospace" fill="#D9A441">budget</text>';
+  svgA += xAxis()+'</svg>';
+
+  // --- giornaliero: barre per giorno + linea budget/giorno (scala diversa) ---
+  const maxB = Math.max(baseDaily, ...pts.map(p=>p.day)) * 1.15 || 1;
+  const yB = mkY(maxB);
+  let svgB = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  pts.forEach((p,i)=>{
+    const x = padL+i*cw;
+    svgB += '<rect x="'+(x+cw*0.16)+'" y="'+yB(p.day)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yB(p.day))+'" rx="2" fill="'+(baseDaily>0&&p.day>baseDaily?'#E4573D':'#D9A441')+'" opacity="0.9"/>';
+  });
+  if(baseDaily>0) svgB += '<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yB(baseDaily)+'" y2="'+yB(baseDaily)+'" stroke="#2E6E6A" stroke-width="1.5" stroke-dasharray="5 4"/>'+
+    '<text x="'+(W-padL)+'" y="'+(yB(baseDaily)-3)+'" text-anchor="end" font-size="8" font-family="monospace" fill="#2E6E6A">'+Math.round(baseDaily)+' €/g</text>';
+  svgB += xAxis()+'</svg>';
+
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">COMPLESSIVO</div>'+svgA+'</div>'+
+    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">GIORNALIERO</div>'+svgB+'</div></div>'+
+    '<div class="small mt8">A sinistra il totale cumulato (con la linea del budget), a destra quanto hai speso ogni singolo giorno (con la linea del budget medio giornaliero). Le barre rosse superano il limite. Scale indipendenti, ultimi 14 giorni.</div>'+
+    bgCatHTML();
+}
+function bgCatHTML(){
+  const byCat = {};
+  expenses.forEach(e=>{ byCat[e.cat] = (byCat[e.cat]||0) + e.amt; });
+  const cats = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  if(!cats.length) return '';
+  const max = cats[0][1];
+  return '<div class="small mt12" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">PER CATEGORIA</div>'+
+    cats.map(([c,v])=>
+      '<div class="row" style="margin-top:6px;gap:8px"><div style="width:96px;font-size:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'+esc(c)+'</div>'+
+      '<div style="flex:1;height:14px;background:var(--teal-soft);border-radius:7px;overflow:hidden"><div style="height:100%;width:'+(v/max*100)+'%;background:var(--teal)"></div></div>'+
+      '<div style="font-family:var(--mono);font-size:11px;min-width:70px;text-align:right">'+eur(v)+'</div></div>'
+    ).join('');
+}
+function renderBudget(){
+  const spent = expenses.reduce((s,e)=>s+e.amt,0);
+  const remainEl = document.getElementById('bgRemain'), det = document.getElementById('bgDetail');
+  if(budgetTotal>0){
+    const left = budgetTotal - spent;
+    remainEl.textContent = both(left)+' rimanenti';
+    remainEl.style.color = left<0 ? 'var(--pin)' : 'var(--ink)';
+    det.textContent = 'Spesi '+both(spent)+' su '+both(budgetTotal)+(left<0?' — budget superato':'');
+    document.getElementById('bgBar').style.width = Math.min(100, spent/budgetTotal*100)+'%';
+    document.getElementById('bgBar').style.background = spent>budgetTotal ? 'var(--pin)' : 'var(--teal)';
+  }else{
+    remainEl.textContent = both(spent)+' spesi';
+    det.textContent = 'Imposta un budget totale per vedere quanto ti resta.';
+    document.getElementById('bgBar').style.width = '0%';
+  }
+  if(!tripRate() && tripCur!=='EUR') det.textContent += ' (tasso '+tripCur+' non disponibile: aggiorna i tassi in Home)';
+
+  // ---- budget giornaliero ADATTIVO: (rimanente) ÷ (giorni restanti), ricalcolato ogni giorno ----
+  const dEl = document.getElementById('bgDaily');
+  const days = tripDays();
+  const today = new Date().toISOString().slice(0,10);
+  const spentToday = expenses.filter(e=>e.date.slice(0,10)===today).reduce((s,e)=>s+e.amt,0);
+  const spentBefore = spent - spentToday;
+  let dailyLine = '';
+  if(budgetTotal>0 && days>0){
+    let remDays;
+    if(today < tripStart) remDays = days;                       // viaggio non ancora iniziato
+    else if(today > tripEnd) remDays = 0;                       // viaggio concluso
+    else remDays = Math.round((new Date(tripEnd) - new Date(today))/86400000) + 1;
+    if(remDays<=0){
+      dEl.innerHTML = '<div class="empty">Viaggio concluso: hai speso '+both(spent)+' su '+both(budgetTotal)+'.</div>';
+      dailyLine = 'Totale: '+both(budgetTotal-spent)+' rimanenti';
+    }else{
+      const daily = Math.max(budgetTotal - spentBefore, 0) / remDays;
+      const leftToday = daily - spentToday;
+      dailyLine = 'Oggi: '+both(Math.max(leftToday,0))+' su '+both(daily);
+      dEl.innerHTML =
+        '<div class="result-big" style="color:'+(leftToday<0?'var(--pin)':'var(--ink)')+'">'+both(leftToday)+' oggi</div>'+
+        '<div class="small">Budget di oggi: '+both(daily)+' — è adattivo: (rimanente '+both(Math.max(budgetTotal-spentBefore,0))+') ÷ '+remDays+' giorni restanti. Se oggi spendi meno, domani avrai di più; se sfori, domani cala.</div>'+
+        '<div class="small">Speso oggi: '+both(spentToday)+(leftToday<0?' — limite di oggi superato':'')+'</div>'+
+        '<div style="height:8px;background:var(--teal-soft);border-radius:6px;margin-top:8px;overflow:hidden">'+
+        '<div style="height:100%;width:'+(daily>0?Math.min(100, spentToday/daily*100):100)+'%;background:'+(spentToday>daily?'var(--pin)':'var(--stamp)')+'"></div></div>'+
+        (today<tripStart?'<div class="small mt8">Il viaggio inizia il '+new Date(tripStart).toLocaleDateString('it-IT')+': questa è un\'anteprima.</div>':'');
+    }
+  }else{
+    dEl.innerHTML = '<div class="empty">Imposta il budget totale e le date del viaggio qui sopra: calcolerò il budget di ogni giorno (rimanente ÷ giorni restanti), aggiornato ogni mezzanotte.</div>';
+    dailyLine = budgetTotal>0 ? 'Totale: '+both(budgetTotal-spent)+' rimanenti' : 'Totale spese: '+both(spent);
+  }
+  document.getElementById('qRemain').textContent = dailyLine + (budgetTotal>0 && days>0 ? ' · Totale: '+both(budgetTotal-spent) : '');
+
+  document.getElementById('bgChart').innerHTML = bgChartSVG();
+  const list = document.getElementById('bgList');
+  const shownExp = bgFilterVal ? expenses.filter(e=>e.date.slice(0,10)===bgFilterVal) : expenses;
+  const info = document.getElementById('bgFilterInfo');
+  if(bgFilterVal){
+    const t = shownExp.reduce((s,e)=>s+e.amt,0);
+    info.textContent = new Date(bgFilterVal).toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})+': '+both(t)+' ('+shownExp.length+' spese)';
+  }else info.textContent = '';
+  if(!shownExp.length){ list.innerHTML = '<div class="empty">'+(bgFilterVal?'Nessuna spesa in questo giorno.':'Nessuna spesa. Aggiungila qui o dalla Home.')+'</div>'; }
+  else{
+    list.innerHTML = [...shownExp].sort((a,b)=>a.date<b.date?1:-1).map(e=>{
+      const shown = e.orig ? fmtCur(e.orig.amt, e.orig.cur)+' (≈ '+eur(e.amt)+')' : both(e.amt);
+      return '<div class="item"><div><div class="t">'+shown+' · '+esc(e.cat)+(e.shared?' <span class="badge">gruppo</span>':'')+'</div>'+
+      '<div class="s">'+new Date(e.date).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+(e.note?' · '+esc(e.note):'')+'</div></div>'+
+      '<div class="acts"><button class="icon-btn" data-edit-bg="'+e.id+'" title="Modifica">✎</button>'+
+      '<button class="icon-btn del" data-del-bg="'+e.id+'" title="Elimina">✕</button></div></div>';
+    }).join('');
+  }
+  renderGroup();
+}
+function renderGroup(){
+  const el = document.getElementById('bgGroup');
+  if(!fb.on){ el.innerHTML = '<div class="empty">Attiva la Sincronizzazione live (⚙️ in alto a destra) per vedere le spese condivise da chi ha lo stesso codice viaggio.</div>'; return; }
+  if(!groupExpenses.length){ el.innerHTML = '<div class="empty">Nessuna spesa di gruppo ancora. Spunta «Condividi col gruppo» quando ne registri una.</div>'; return; }
+  const tot = groupExpenses.reduce((s,e)=>s+e.amt,0);
+  const byPerson = {};
+  groupExpenses.forEach(e=>{ const p=e.by||'?'; byPerson[p]=(byPerson[p]||0)+e.amt; });
+  const people = Object.keys(byPerson);
+  let settle = '';
+  if(people.length>1){
+    const avg = tot/people.length;
+    const bal = people.map(p=>({p, net: byPerson[p]-avg})).sort((a,b)=>a.net-b.net);
+    const transfers=[]; let i=0, j=bal.length-1;
+    while(i<j){
+      const amt = Math.min(-bal[i].net, bal[j].net);
+      if(amt>0.005) transfers.push({from:bal[i].p, to:bal[j].p, amt});
+      bal[i].net += amt; bal[j].net -= amt;
+      if(bal[i].net > -0.005) i++;
+      if(bal[j].net < 0.005) j--;
+    }
+    settle = '<div class="small mt8" style="border-top:1px dashed var(--line);padding-top:8px"><b>Pareggio conti</b> ('+eur(avg)+' a testa, diviso tra chi ha registrato spese): '+
+      (transfers.length ? transfers.map(t=>esc(t.from)+' → '+esc(t.to)+': '+both(t.amt)).join(' · ') : 'siete già pari ✓')+'</div>';
+  }
+  el.innerHTML = '<div class="result-big">'+both(tot)+' totali di gruppo</div>' +
+    [...groupExpenses].sort((a,b)=>a.date<b.date?1:-1).map(e=>
+      '<div class="item"><div><div class="t">'+both(e.amt)+' · '+esc(e.cat)+'</div>'+
+      '<div class="s">'+esc(e.by||'?')+' · '+new Date(e.date).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+(e.note?' · '+esc(e.note):'')+'</div></div>'+
+      ((e.by===userName)?'<div class="acts"><button class="icon-btn del" data-del-grp="'+e.id+'" title="Elimina">✕</button></div>':'')+
+      '</div>'
+    ).join('') + settle;
+}
+document.getElementById('bgSet').addEventListener('click', async ()=>{
+  const v = parseFloat(document.getElementById('bgTotal').value);
+  if(!isNaN(v) && v>=0){ budgetTotal = v; await saveBudget(); }
+});
+let bgFilterVal = '';
+document.getElementById('bgFilter').addEventListener('change', e=>{ bgFilterVal = e.target.value; renderBudget(); });
+document.getElementById('bgFilterToday').addEventListener('click', ()=>{
+  bgFilterVal = new Date().toISOString().slice(0,10);
+  document.getElementById('bgFilter').value = bgFilterVal;
+  renderBudget();
+});
+document.getElementById('bgFilterAll').addEventListener('click', ()=>{
+  bgFilterVal = ''; document.getElementById('bgFilter').value = '';
+  renderBudget();
+});
+document.getElementById('bgDateToday').addEventListener('click', ()=>{
+  document.getElementById('bgDate').value = new Date().toISOString().slice(0,10);
+});
+function curToggle(btnId, inputId){
+  const b = document.getElementById(btnId);
+  b.addEventListener('click', ()=>{
+    const newMode = b.dataset.mode==='eur' ? 'trip' : 'eur';
+    const inp = document.getElementById(inputId);
+    const v = parseFloat(inp.value);
+    const r = tripRate();
+    if(!isNaN(v) && r && tripCur!=='EUR'){                    // converte l'importo già digitato
+      inp.value = (newMode==='trip' ? v*r : v/r).toFixed(2);
+    }
+    b.dataset.mode = newMode;
+    b.textContent = newMode==='eur' ? 'EUR' : tripCur;
+  });
+}
+curToggle('qAmtCur','qAmt'); curToggle('bgAmtCur','bgAmt');
+function refreshCurToggles(){
+  ['qAmtCur','bgAmtCur'].forEach(id=>{
+    const b = document.getElementById(id);
+    if(b.dataset.mode==='trip') b.textContent = tripCur;
+  });
+}
+bgCurSel.addEventListener('change', async ()=>{ tripCur = bgCurSel.value; refreshCurToggles(); await saveBudget(); });
+document.getElementById('bgStart').addEventListener('change', async e=>{ tripStart = e.target.value; await saveBudget(); });
+document.getElementById('bgEnd').addEventListener('change', async e=>{ tripEnd = e.target.value; await saveBudget(); });
+document.getElementById('bgAdd').addEventListener('click', ()=>{
+  const amt = parseFloat(document.getElementById('bgAmt').value);
+  if(isNaN(amt) || amt<=0) return;
+  const mode = document.getElementById('bgAmtCur').dataset.mode;
+  if(editingExpId){
+    const e = expenses.find(x=>String(x.id)===String(editingExpId));
+    if(e){
+      let amtEur = amt, orig = null;
+      if(mode==='trip' && tripCur!=='EUR'){
+        const r = tripRate();
+        if(!r){ alert('Tasso non disponibile: usa EUR.'); return; }
+        amtEur = amt / r; orig = {amt, cur:tripCur};
+      }
+      const wasShared = e.shared;
+      const newDate = document.getElementById('bgDate').value;
+      if(newDate && newDate !== e.date.slice(0,10)) e.date = newDate+'T12:00:00';
+      e.amt = amtEur; e.orig = orig;
+      e.cat = document.getElementById('bgCat').value;
+      e.note = document.getElementById('bgNote').value.trim();
+      e.shared = document.getElementById('bgShared').checked;
+      if(fb.on){
+        try{
+          if(e.shared) R('spese/'+e.id).set(e);
+          else if(wasShared) R('spese/'+e.id).remove();
+        }catch(err){}
+      }
+      expResetForm();
+      saveBudget();
+    }
+    return;
+  }
+  const ok = addExpense(amt, mode,
+    document.getElementById('bgCat').value,
+    document.getElementById('bgNote').value.trim(),
+    document.getElementById('bgShared').checked,
+    document.getElementById('bgDate').value);
+  if(ok) expResetForm();
+});
+document.getElementById('qAdd').addEventListener('click', ()=>{
+  const amt = parseFloat(document.getElementById('qAmt').value);
+  if(isNaN(amt) || amt<=0) return;
+  if(addExpense(amt, document.getElementById('qAmtCur').dataset.mode, document.getElementById('qCat').value, '', false))
+    document.getElementById('qAmt').value='';
+});
+let editingExpId = null;
+function expResetForm(){
+  editingExpId = null;
+  document.getElementById('bgAmt').value=''; document.getElementById('bgNote').value='';
+  document.getElementById('bgShared').checked=false;
+  document.getElementById('bgDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('bgAdd').textContent = '+ Registra spesa';
+  document.getElementById('bgCancelEdit').style.display = 'none';
+}
+document.getElementById('bgCancelEdit').addEventListener('click', expResetForm);
+document.getElementById('bgList').addEventListener('click', async ev=>{
+  const ed = ev.target.closest('[data-edit-bg]');
+  if(ed){
+    const e = expenses.find(x=>String(x.id)===String(ed.dataset.editBg)); if(!e) return;
+    editingExpId = e.id;
+    document.getElementById('bgAmtCur').dataset.mode = 'eur';
+    document.getElementById('bgAmtCur').textContent = 'EUR';
+    document.getElementById('bgAmt').value = e.amt.toFixed(2);
+    document.getElementById('bgCat').value = e.cat;
+    document.getElementById('bgNote').value = e.note||'';
+    document.getElementById('bgDate').value = e.date.slice(0,10);
+    document.getElementById('bgShared').checked = !!e.shared;
+    document.getElementById('bgAdd').textContent = '💾 Salva modifiche';
+    document.getElementById('bgCancelEdit').style.display = 'block';
+    document.getElementById('bgAmt').scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
+  const b = ev.target.closest('[data-del-bg]'); if(!b) return;
+  const id = String(b.dataset.delBg);
+  if(String(editingExpId)===id) expResetForm();
+  const removed = expenses.find(x=>String(x.id)===id);
+  expenses = expenses.filter(x=>String(x.id)!==id);
+  if(removed && removed.shared && fb.on){ try{ R('spese/'+id).remove(); }catch(err){} }
+  await saveBudget();
+  if(removed) showUndo('Spesa di '+eur(removed.amt)+' eliminata', async ()=>{
+    expenses.push(removed);
+    if(removed.shared && fb.on){ try{ R('spese/'+removed.id).set(removed); }catch(err){} }
+    await saveBudget();
+  });
+});
+document.getElementById('bgGroup').addEventListener('click', async ev=>{
+  const b = ev.target.closest('[data-del-grp]'); if(!b) return;
+  const id = String(b.dataset.delGrp);
+  if(fb.on){ try{ R('spese/'+id).remove(); }catch(err){} }
+  expenses = expenses.filter(x=>String(x.id)!==id);
+  await saveBudget();
+});
+
+/* ============ DOCUMENTI: albero cartelle + file (IndexedDB, fallback storage) ============ */
+let docTree=[], docSel=null, docOpenSet=new Set(), docIdb=null;
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    try{
+      const r = indexedDB.open('viaggio-docs',1);
+      r.onupgradeneeded = ()=>r.result.createObjectStore('files');
+      r.onsuccess = ()=>res(r.result);
+      r.onerror = ()=>rej(r.error);
+    }catch(e){ rej(e); }
+  });
+}
+async function blobPut(id,data){
+  if(docIdb) return new Promise((res,rej)=>{ const tx=docIdb.transaction('files','readwrite'); tx.objectStore('files').put(data,id); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); });
+  await store.set('docblob:'+id, data);
+}
+async function blobGet(id){
+  if(docIdb) return new Promise((res,rej)=>{ const tx=docIdb.transaction('files'); const q=tx.objectStore('files').get(id); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); });
+  return await store.get('docblob:'+id);
+}
+async function blobDel(id){
+  if(docIdb) return new Promise((res)=>{ const tx=docIdb.transaction('files','readwrite'); tx.objectStore('files').delete(id); tx.oncomplete=res; tx.onerror=res; });
+  try{ if(window.storage) await window.storage.delete('viaggio:docblob:'+id); }catch(e){}
+  try{ localStorage.removeItem('viaggio:docblob:'+id); }catch(e){}
+}
+const fmtSize = b => b>1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' KB';
+const docIcon = m => !m ? '📄' : m.startsWith('image')?'🖼️' : m.includes('pdf')?'📕' : m.startsWith('video')?'🎬' : m.startsWith('audio')?'🎵' : '📄';
+async function saveDocTree(){ await store.set('docTree', docTree); renderDocs(); }
+function docChildren(pid){ return docTree.filter(n=>(n.parent||null)===(pid||null)); }
+function docDescendants(id){
+  const out = [id];
+  for(let i=0;i<out.length;i++) docChildren(out[i]).forEach(k=>out.push(k.id));
+  return out;
+}
+function docStats(id){ // file e dimensione totali (ricorsivo)
+  let files=0, size=0;
+  docDescendants(id).forEach(d=>{ const n=docTree.find(x=>x.id===d); if(n&&n.type==='file'){ files++; size+=n.size||0; } });
+  return {files, size};
+}
+function folderOptions(excludeId){ // tutte le cartelle valide come destinazione
+  const opts = [{id:'__root__', label:'🏠 Principale'}];
+  const banned = excludeId ? docDescendants(excludeId) : [];
+  const walk = (pid, depth)=>{
+    docChildren(pid).filter(n=>n.type==='folder').sort((a,b)=>a.name.localeCompare(b.name)).forEach(f=>{
+      if(banned.includes(f.id)) return;
+      opts.push({id:f.id, label:'\u00A0'.repeat(depth*3)+'📁 '+f.name});
+      walk(f.id, depth+1);
+    });
+  };
+  walk(null, 1);
+  return opts;
+}
+function docFolderName(){ const f = docTree.find(n=>n.id===docSel); return f ? '📁 '+f.name : '🏠 Principale'; }
+let docMenu=null, docConfirmDel=null;
+function docActionsHTML(n){
+  const stats = n.type==='folder' ? docStats(n.id) : null;
+  const opts = folderOptions(n.type==='folder' ? n.id : null)
+    .map(o=>'<option value="'+o.id+'"'+(((n.parent||null)===(o.id==='__root__'?null:o.id))?' selected':'')+'>'+o.label+'</option>').join('');
+  const delLabel = docConfirmDel===n.id
+    ? '⚠ Confermi? '+(stats&&stats.files?'('+stats.files+' file)':'')
+    : '🗑 Elimina'+(n.type==='folder'?' cartella':'');
+  return '<div style="margin:2px 0 8px 24px;padding:10px;background:var(--teal-soft);border-radius:10px">'+
+    '<div class="row"><input id="docRen" value="'+esc(n.name)+'"><button class="btn btn-primary" data-dren="'+n.id+'" style="min-width:56px">✎ OK</button></div>'+
+    '<div class="row mt8"><select id="docMove">'+opts+'</select><button class="btn btn-primary" data-dmove="'+n.id+'" style="min-width:70px">↔ Sposta</button></div>'+
+    '<button class="btn btn-danger mt8" data-ddel="'+n.id+'" style="width:100%">'+delLabel+'</button>'+
+    '</div>';
+}
+function renderDocs(){
+  document.getElementById('docTarget').textContent = 'Destinazione: '+docFolderName();
+  const totFiles = docTree.filter(n=>n.type==='file');
+  const totKB = totFiles.reduce((s,n)=>s+(n.size||0),0);
+  document.getElementById('docQuota').textContent = docTree.length
+    ? 'Archivio: '+totFiles.length+' file, '+fmtSize(totKB)+(docIdb?'':' — memoria limitata su questo dispositivo: preferisci file piccoli')
+    : '';
+  const el = document.getElementById('docTreeEl');
+  const rows = [];
+  rows.push('<div class="dnode'+(docSel===null?' sel':'')+'" data-dfold="__root__"><span class="arrow"></span><div class="dn"><div class="t">🏠 Principale</div></div></div>');
+  const walk = (pid, depth)=>{
+    const kids = docChildren(pid).sort((a,b)=> a.type===b.type ? a.name.localeCompare(b.name) : (a.type==='folder'?-1:1));
+    kids.forEach(n=>{
+      const pad = 10 + depth*16;
+      const guide = depth>1 ? 'border-left:2px solid var(--line);' : '';
+      if(n.type==='folder'){
+        const open = docOpenSet.has(n.id);
+        const st = docStats(n.id);
+        rows.push('<div class="dnode'+(docSel===n.id?' sel':'')+'" data-dnode="'+n.id+'" data-dfold="'+n.id+'" style="margin-left:'+pad+'px;'+guide+'">'+
+          '<span class="arrow">'+(open?'▾':'▸')+'</span>'+
+          '<div class="dn"><div class="t">📁 '+esc(n.name)+'</div><div class="s">'+docChildren(n.id).length+' elementi'+(st.files?' · '+st.files+' file, '+fmtSize(st.size):'')+'</div></div>'+
+          '<button class="icon-btn" data-dmenu="'+n.id+'" title="Azioni">⋯</button></div>');
+        if(docMenu===n.id) rows.push(docActionsHTML(n));
+        if(open) walk(n.id, depth+1);
+      }else{
+        rows.push('<div class="dnode" data-dnode="'+n.id+'" style="margin-left:'+pad+'px;'+guide+'">'+
+          '<span class="arrow"></span>'+
+          '<div class="dn" data-dopen="'+n.id+'"><div class="t">'+docIcon(n.mime)+' '+esc(n.name)+'</div><div class="s">'+fmtSize(n.size||0)+'</div></div>'+
+          '<button class="icon-btn" data-dmenu="'+n.id+'" title="Azioni">⋯</button></div>');
+        if(docMenu===n.id) rows.push(docActionsHTML(n));
+      }
+    });
+  };
+  walk(null, 1);
+  el.innerHTML = rows.length>1 ? rows.join('') : rows[0]+'<div class="empty mt8">Archivio vuoto. Carica biglietti, prenotazioni, assicurazioni… e organizzali in cartelle e sottocartelle.</div>';
+}
+document.getElementById('docExpandAll').addEventListener('click', ()=>{
+  docTree.filter(n=>n.type==='folder').forEach(f=>docOpenSet.add(f.id)); renderDocs();
+});
+document.getElementById('docCollapseAll').addEventListener('click', ()=>{
+  docOpenSet.clear(); docMenu=null; docConfirmDel=null; renderDocs();
+});
+document.getElementById('docTreeEl').addEventListener('click', async ev=>{
+  if(Date.now() - dragEndedAt < 350) return; // era la fine di un trascinamento
+  const menu = ev.target.closest('[data-dmenu]');
+  if(menu){
+    const id = menu.dataset.dmenu;
+    docMenu = (docMenu===id) ? null : id;
+    docConfirmDel = null;
+    renderDocs();
+    return;
+  }
+  const ren = ev.target.closest('[data-dren]');
+  if(ren){
+    const n = docTree.find(x=>x.id===ren.dataset.dren);
+    const name = document.getElementById('docRen').value.trim();
+    if(n && name){ n.name = name; docMenu=null; await saveDocTree(); }
+    return;
+  }
+  const mv = ev.target.closest('[data-dmove]');
+  if(mv){
+    const n = docTree.find(x=>x.id===mv.dataset.dmove);
+    const dest = document.getElementById('docMove').value;
+    if(n){
+      n.parent = dest==='__root__' ? null : dest;
+      if(n.parent) docOpenSet.add(n.parent);
+      docMenu=null; await saveDocTree();
+    }
+    return;
+  }
+  const del = ev.target.closest('[data-ddel]');
+  if(del){
+    const id = del.dataset.ddel;
+    const n = docTree.find(x=>x.id===id);
+    const st = n && n.type==='folder' ? docStats(id) : null;
+    if(n && n.type==='folder' && docChildren(id).length && docConfirmDel!==id){
+      docConfirmDel = id; renderDocs(); return;   // prima richiesta: chiedo conferma
+    }
+    const toDel = docDescendants(id);
+    for(const d of toDel){ const x=docTree.find(y=>y.id===d); if(x&&x.type==='file') await blobDel(d); }
+    docTree = docTree.filter(x=>!toDel.includes(x.id));
+    if(toDel.includes(docSel)) docSel=null;
+    docMenu=null; docConfirmDel=null;
+    await saveDocTree();
+    return;
+  }
+  const fold = ev.target.closest('[data-dfold]');
+  if(fold){
+    const id = fold.dataset.dfold;
+    if(id==='__root__'){ docSel=null; }
+    else{
+      if(docSel===id){ docOpenSet.has(id)?docOpenSet.delete(id):docOpenSet.add(id); }
+      else{ docSel=id; docOpenSet.add(id); }
+    }
+    renderDocs();
+    return;
+  }
+  const open = ev.target.closest('[data-dopen]');
+  if(open) openDoc(open.dataset.dopen);
+});
+document.getElementById('docNewFolderBtn').addEventListener('click', ()=>{
+  const r = document.getElementById('docFolderRow');
+  r.style.display = r.style.display==='none' ? 'flex' : 'none';
+  if(r.style.display==='flex') document.getElementById('docFolderName').focus();
+});
+document.getElementById('docFolderOk').addEventListener('click', async ()=>{
+  const name = document.getElementById('docFolderName').value.trim(); if(!name) return;
+  const f = {id:uid(), type:'folder', name, parent:docSel};
+  docTree.push(f);
+  if(docSel) docOpenSet.add(docSel);
+  document.getElementById('docFolderName').value='';
+  document.getElementById('docFolderRow').style.display='none';
+  await saveDocTree();
+});
+document.getElementById('docUploadBtn').addEventListener('click', ()=>document.getElementById('docFileInput').click());
+document.getElementById('docFileInput').addEventListener('change', async ev=>{
+  const files = [...ev.target.files];
+  ev.target.value = '';
+  for(const f of files){
+    const limit = docIdb ? 25*1048576 : 3*1048576;
+    if(f.size > limit){ alert('«'+f.name+'» è troppo grande ('+fmtSize(f.size)+', max '+fmtSize(limit)+' su questo dispositivo).'); continue; }
+    const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+    const id = uid();
+    try{
+      await blobPut(id, dataUrl);
+      docTree.push({id, type:'file', name:f.name, parent:docSel, size:f.size, mime:f.type});
+    }catch(e){ alert('Impossibile salvare «'+f.name+'»: memoria piena su questo dispositivo.'); }
+  }
+  if(docSel) docOpenSet.add(docSel);
+  await saveDocTree();
+});
+async function openDoc(id){
+  const n = docTree.find(x=>x.id===id); if(!n) return;
+  const data = await blobGet(id);
+  if(!data){ alert('File non trovato nella memoria del dispositivo.'); return; }
+  const v = document.getElementById('docViewer');
+  document.getElementById('docViewerTitle').textContent = n.name+' · '+fmtSize(n.size||0);
+  const body = document.getElementById('docViewerBody');
+  const down = document.getElementById('docViewerDown');
+  down.href = data; down.download = n.name;
+  if(n.mime && n.mime.startsWith('image')){
+    body.innerHTML = '<img src="'+data+'" style="max-width:100%;border-radius:10px" alt="'+esc(n.name)+'">';
+  }else if(n.mime && n.mime.includes('pdf')){
+    body.innerHTML = '<iframe src="'+data+'" style="width:100%;height:75vh;border:none;border-radius:10px;background:#fff"></iframe>'+
+      '<div class="small mt8" style="color:#9CC6C9">Se il PDF non compare, usa ⬇ Scarica per aprirlo con il lettore del telefono.</div>';
+  }else{
+    body.innerHTML = '<div class="small" style="color:#9CC6C9;padding:24px 8px">Anteprima non disponibile per questo tipo di file: usa ⬇ Scarica per aprirlo con un\'app del telefono.</div>';
+  }
+  v.style.display = 'block';
+}
+document.getElementById('docViewerClose').addEventListener('click', ()=>{
+  document.getElementById('docViewer').style.display='none';
+  document.getElementById('docViewerBody').innerHTML='';
+});
+
+/* ---- importazione luoghi salvati da Google Maps (Takeout CSV/GeoJSON, My Maps KML) ---- */
+const impStatus = m => document.getElementById('impStatus').textContent = m;
+function csvParseLine(l){
+  const out=[]; let cur='', q=false;
+  for(let i=0;i<l.length;i++){
+    const ch=l[i];
+    if(ch==='"'){ if(q && l[i+1]==='"'){ cur+='"'; i++; } else q=!q; }
+    else if(ch===',' && !q){ out.push(cur); cur=''; }
+    else cur+=ch;
+  }
+  out.push(cur); return out;
+}
+function parseMapsExport(text, fname){
+  const items=[];
+  const push=(name,lat,lng)=>{ if(name&&isFinite(lat)&&isFinite(lng)) items.push({name:String(name).trim(),lat:+lat,lng:+lng}); };
+  const pushGeo=(name,q)=>{ if(name) items.push({name:String(name).trim(), geocode:true, q:q||name}); };
+  if(/\.kml$/i.test(fname) || text.includes('<kml')){
+    const doc = new DOMParser().parseFromString(text,'text/xml');
+    doc.querySelectorAll('Placemark').forEach(pm=>{
+      const name = (pm.querySelector('name')||{textContent:'Luogo'}).textContent;
+      const co = pm.querySelector('coordinates');
+      if(co){ const p=co.textContent.trim().split(/[\s]+/)[0].split(','); push(name, parseFloat(p[1]), parseFloat(p[0])); }
+    });
+  } else if(text.trim().startsWith('{') || /\.(geo)?json$/i.test(fname)){
+    const d = JSON.parse(text);
+    (d.features||[]).forEach(f=>{
+      const p = f.properties||{};
+      const name = p.Title || p.title || p.name || (p.location&&p.location.name) || (p.Location&&p.Location.Name) || 'Luogo importato';
+      const c = f.geometry && f.geometry.coordinates;
+      if(c && isFinite(c[0]) && isFinite(c[1]) && (c[0]!==0||c[1]!==0)) push(name, c[1], c[0]);
+      else if(p.location && isFinite(p.location.latitude)) push(name, p.location.latitude, p.location.longitude);
+      else pushGeo(name, (p.location&&p.location.address)||name);
+    });
+  } else { // CSV di Takeout: Titolo, Nota, URL (o simili)
+    const lines = text.split(/\r?\n/).filter(l=>l.trim());
+    if(!lines.length) return items;
+    const head = csvParseLine(lines[0]).map(s=>s.toLowerCase());
+    let ti = head.findIndex(h=>/titolo|title|nome|name/.test(h)); if(ti<0) ti=0;
+    const ui = head.findIndex(h=>/url/.test(h));
+    lines.slice(1).forEach(l=>{
+      const c = csvParseLine(l);
+      const name = (c[ti]||'').trim(); if(!name) return;
+      const url = ui>=0 ? (c[ui]||'') : '';
+      const m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if(m) push(name, +m[1], +m[2]); else pushGeo(name);
+    });
+  }
+  return items;
+}
+document.getElementById('impBtn').addEventListener('click', ()=>document.getElementById('impFile').click());
+document.getElementById('impFile').addEventListener('change', async ev=>{
+  const f = ev.target.files[0]; ev.target.value='';
+  if(!f) return;
+  let items=[];
+  try{ items = parseMapsExport(await f.text(), f.name); }
+  catch(e){ impStatus('File non riconosciuto: esporta in CSV, GeoJSON o KML e riprova.'); return; }
+  if(!items.length){ impStatus('Nessun luogo trovato nel file.'); return; }
+  const existing = new Set(pois.map(p=>p.name.toLowerCase()));
+  items = items.filter(i=>!existing.has(i.name.toLowerCase()));
+  if(!items.length){ impStatus('Tutti i luoghi del file sono già nel tuo elenco.'); return; }
+  const direct = items.filter(i=>!i.geocode);
+  const toGeo = items.filter(i=>i.geocode).slice(0,25); // rispetto il limite del servizio gratuito
+  direct.forEach(i=>pois.push({id:uid(), name:i.name, cat:'Da visitare', lat:i.lat, lng:i.lng, visited:false}));
+  if(direct.length) await savePois();
+  impStatus('Importati '+direct.length+' luoghi con coordinate.'+(toGeo.length?' Cerco le posizioni di altri '+toGeo.length+'…':''));
+  let found=0;
+  for(let i=0;i<toGeo.length;i++){
+    impStatus('Cerco posizioni: '+(i+1)+'/'+toGeo.length+' — «'+toGeo[i].name+'»');
+    try{
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(toGeo[i].q));
+      const d = await r.json();
+      if(d[0]){ pois.push({id:uid(), name:toGeo[i].name, cat:'Da visitare', lat:+d[0].lat, lng:+d[0].lon, visited:false}); found++; }
+    }catch(e){}
+    await new Promise(res=>setTimeout(res, 1100)); // max ~1 richiesta al secondo
+  }
+  if(found) await savePois();
+  const skipped = items.filter(i=>i.geocode).length - toGeo.length;
+  impStatus('Importazione completata: '+(direct.length+found)+' luoghi aggiunti.'+
+    (toGeo.length-found>0 ? ' '+(toGeo.length-found)+' non trovati.' : '')+
+    (skipped>0 ? ' '+skipped+' saltati (max 25 ricerche per volta: ricarica il file per continuare).' : ''));
+});
+
+/* ---- drag & drop a pressione prolungata su cartelle e file ---- */
+const dTree = document.getElementById('docTreeEl');
+let drag = {id:null, timer:null, active:false, sx:0, sy:0, ghost:null, tgt:null};
+function dragClear(){
+  clearTimeout(drag.timer);
+  if(drag.ghost) drag.ghost.remove();
+  document.querySelectorAll('.dragsrc,.droptgt').forEach(el=>el.classList.remove('dragsrc','droptgt'));
+  drag = {id:null, timer:null, active:false, sx:0, sy:0, ghost:null, tgt:null};
+}
+dTree.addEventListener('pointerdown', e=>{
+  const row = e.target.closest('[data-dnode]');
+  if(!row || e.target.closest('.icon-btn')) return;
+  drag.id = row.dataset.dnode; drag.sx = e.clientX; drag.sy = e.clientY;
+  drag.timer = setTimeout(()=>{
+    drag.active = true;
+    row.classList.add('dragsrc');
+    const n = docTree.find(x=>x.id===drag.id);
+    const g = document.createElement('div');
+    g.id = 'dragGhost';
+    g.textContent = (n.type==='folder'?'📁 ':docIcon(n.mime)+' ')+n.name;
+    g.style.left = drag.sx+'px'; g.style.top = (drag.sy-40)+'px';
+    document.body.appendChild(g);
+    drag.ghost = g;
+    if(navigator.vibrate) navigator.vibrate(30);
+  }, 450);
+});
+document.addEventListener('pointermove', e=>{
+  if(!drag.id) return;
+  if(!drag.active){
+    if(Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy) > 10) dragClear(); // sta scorrendo la pagina
+    return;
+  }
+  drag.ghost.style.left = (e.clientX+8)+'px';
+  drag.ghost.style.top = (e.clientY-44)+'px';
+  document.querySelectorAll('.droptgt').forEach(el=>el.classList.remove('droptgt'));
+  drag.tgt = null;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const fold = under && under.closest('[data-dfold]');
+  if(fold){
+    const destId = fold.dataset.dfold;
+    const n = docTree.find(x=>x.id===drag.id);
+    const banned = (n && n.type==='folder') ? docDescendants(n.id) : [];
+    if(destId!==drag.id && !banned.includes(destId)){
+      fold.classList.add('droptgt');
+      drag.tgt = destId;
+    }
+  }
+});
+document.addEventListener('pointerup', async ()=>{
+  if(drag.active){
+    dragEndedAt = Date.now();   // il click successivo va ignorato
+    if(drag.tgt){
+      const n = docTree.find(x=>x.id===drag.id);
+      if(n){
+        n.parent = drag.tgt==='__root__' ? null : drag.tgt;
+        if(n.parent) docOpenSet.add(n.parent);
+        dragClear();
+        await saveDocTree();
+        return;
+      }
+    }
+  }
+  dragClear();
+});
+let dragEndedAt = 0;
+document.addEventListener('pointercancel', dragClear);
+dTree.addEventListener('touchmove', e=>{ if(drag.active) e.preventDefault(); }, {passive:false});
+dTree.addEventListener('contextmenu', e=>{ if(drag.id||drag.active) e.preventDefault(); });
+
+/* ---- esporta/importa struttura documenti (JSON con file inclusi) ---- */
+const xferStatus = m => document.getElementById('docXferStatus').textContent = m;
+document.getElementById('docExportBtn').addEventListener('click', async ()=>{
+  const scope = docSel; // esporta dalla cartella selezionata (Principale = tutto)
+  const nodes = [];
+  const walk = async (pid, path)=>{
+    for(const n of docChildren(pid).sort((a,b)=>a.name.localeCompare(b.name))){
+      if(n.type==='folder'){
+        nodes.push({type:'folder', path:[...path, n.name]});
+        await walk(n.id, [...path, n.name]);
+      }else{
+        xferStatus('Preparo: '+n.name+'…');
+        const data = await blobGet(n.id);
+        if(data) nodes.push({type:'file', path:[...path], name:n.name, mime:n.mime||'', size:n.size||0, data});
+      }
+    }
+  };
+  await walk(scope, []);
+  if(!nodes.length){ xferStatus('Niente da esportare in '+docFolderName()+'.'); return; }
+  const payload = JSON.stringify({v:1, app:'compagno-di-viaggio', kind:'docs', origine:docFolderName(), nodes});
+  const blob = new Blob([payload], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'documenti-viaggio.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  const nf = nodes.filter(n=>n.type==='file').length;
+  xferStatus('Esportati '+nf+' file e '+(nodes.length-nf)+' cartelle da '+docFolderName()+' ('+fmtSize(blob.size)+'). Invia il file agli altri.');
+});
+document.getElementById('docImportBtn').addEventListener('click', ()=>document.getElementById('docImportFile').click());
+document.getElementById('docImportFile').addEventListener('change', async ev=>{
+  const f = ev.target.files[0]; ev.target.value='';
+  if(!f) return;
+  let d;
+  try{ d = JSON.parse(await f.text()); }catch(e){ xferStatus('File non valido.'); return; }
+  if(!d || d.kind!=='docs' || !Array.isArray(d.nodes)){ xferStatus('Questo non è un export di documenti dell\'app.'); return; }
+  const ensureFolder = (path)=>{ // riusa le cartelle esistenti con lo stesso nome, crea quelle mancanti
+    let pid = docSel; // innesto nella destinazione selezionata
+    for(const name of path){
+      let fold = docChildren(pid).find(n=>n.type==='folder' && n.name===name);
+      if(!fold){ fold = {id:uid(), type:'folder', name, parent:pid}; docTree.push(fold); }
+      pid = fold.id;
+    }
+    return pid;
+  };
+  let added=0, replaced=0, failed=0, done=0;
+  const files = d.nodes.filter(n=>n.type==='file');
+  for(const n of d.nodes){
+    if(n.type==='folder'){ ensureFolder(n.path); continue; }
+    done++;
+    xferStatus('Importo '+done+'/'+files.length+': '+n.name+'…');
+    const pid = ensureFolder(n.path||[]);
+    const existing = docChildren(pid).find(x=>x.type==='file' && x.name===n.name);
+    try{
+      if(existing){                                   // stesso percorso e nome → sovrascrivo
+        await blobPut(existing.id, n.data);
+        existing.size = n.size; existing.mime = n.mime;
+        replaced++;
+      }else{                                          // file nuovo → aggiungo (i personali restano intatti)
+        const id = uid();
+        await blobPut(id, n.data);
+        docTree.push({id, type:'file', name:n.name, parent:pid, size:n.size, mime:n.mime});
+        added++;
+      }
+    }catch(e){ failed++; }
+  }
+  if(docSel) docOpenSet.add(docSel);
+  await saveDocTree();
+  xferStatus('Importazione in '+docFolderName()+' completata: '+added+' file nuovi, '+replaced+' aggiornati'+(failed?', '+failed+' falliti (memoria piena?)':'')+'. I tuoi file personali non sono stati toccati.');
+});
+
+/* ============ ANNULLA ELIMINAZIONE ============ */
+let undoFn=null, undoTimer=null;
+function showUndo(msg, fn){
+  undoFn = fn;
+  document.getElementById('undoMsg').textContent = msg;
+  const b = document.getElementById('undoBar');
+  b.style.display = 'flex';
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(hideUndo, 6000);
+}
+function hideUndo(){ document.getElementById('undoBar').style.display='none'; undoFn=null; }
+document.getElementById('undoBtn').addEventListener('click', async ()=>{ const f=undoFn; hideUndo(); if(f) await f(); });
+
+/* ============ TEMA ============ */
+const themeMq = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+function applyTheme(v){
+  const dark = v==='dark' || (v==='auto' && themeMq && themeMq.matches);
+  document.body.classList.toggle('dark', dark);
+}
+document.getElementById('themeSel').addEventListener('change', async e=>{
+  await store.set('theme', e.target.value);
+  applyTheme(e.target.value);
+});
+if(themeMq && themeMq.addEventListener) themeMq.addEventListener('change', ()=>{
+  applyTheme(document.getElementById('themeSel').value);
+});
+
+/* ============ DESTINAZIONE + METEO (Open-Meteo, gratuito senza chiave) ============ */
+let tripDest = null, weatherHTML = '';
+const WMO = {0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌦',56:'🌧',57:'🌧',61:'🌧',63:'🌧',65:'🌧',66:'🌧',67:'🌧',71:'🌨',73:'🌨',75:'❄️',77:'🌨',80:'🌦',81:'🌧',82:'⛈',85:'🌨',86:'🌨',95:'⛈',96:'⛈',99:'⛈'};
+async function loadWeather(){
+  if(!tripDest){ weatherHTML=''; renderToday(); return; }
+  try{
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude='+tripDest.lat+'&longitude='+tripDest.lng+
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5');
+    const d = await r.json();
+    const t = d.daily;
+    weatherHTML = '<div class="small" style="font-weight:600">Meteo a '+esc(tripDest.name)+'</div>'+
+      '<div class="row mt8" style="justify-content:space-between;text-align:center">'+
+      t.time.map((day,i)=>
+        '<div style="flex:1"><div class="small">'+new Date(day).toLocaleDateString('it-IT',{weekday:'short'})+'</div>'+
+        '<div style="font-size:20px">'+(WMO[t.weather_code[i]]||'🌡')+'</div>'+
+        '<div class="small" style="font-family:var(--mono)">'+Math.round(t.temperature_2m_min[i])+'°/'+Math.round(t.temperature_2m_max[i])+'°</div></div>'
+      ).join('')+'</div>';
+  }catch(e){ weatherHTML = '<div class="small">Meteo non disponibile (serve connessione).</div>'; }
+  renderToday();
+}
+document.getElementById('bgDestSet').addEventListener('click', async ()=>{
+  const q = document.getElementById('bgDest').value.trim();
+  const info = document.getElementById('bgDestInfo');
+  if(!q){ tripDest=null; info.textContent='Destinazione rimossa.'; await saveBudget(); loadWeather(); return; }
+  info.textContent = 'Cerco «'+q+'»…';
+  try{
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=it&q='+encodeURIComponent(q));
+    const d = await r.json();
+    if(!d[0]){ info.textContent='Città non trovata: prova ad aggiungere il paese.'; return; }
+    tripDest = {name: d[0].display_name.split(',')[0], lat:+d[0].lat, lng:+d[0].lon};
+    info.textContent = '✓ '+d[0].display_name.split(',').slice(0,3).join(',');
+    await saveBudget();
+    loadWeather();
+  }catch(e){ info.textContent='Ricerca non disponibile (offline o anteprima Claude).'; }
+});
+
+/* ============ VISTA OGGI ============ */
+function renderToday(){
+  const el = document.getElementById('todayCard'); if(!el) return;
+  const today = new Date().toISOString().slice(0,10);
+  const evs = [...events].filter(e=>e.date.slice(0,10)===today).sort((a,b)=>a.date<b.date?-1:1);
+  let h = evs.length
+    ? evs.map(e=>'<div class="item"><div><div class="t">'+esc(e.name)+'</div>'+
+        '<div class="s">'+new Date(e.date).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+(e.place?' · '+esc(e.place):'')+'</div></div>'+
+        (e.url?'<a class="lnk" target="_blank" rel="noopener" href="'+esc(e.url)+'">🔗</a>':'')+'</div>').join('')
+    : '<div class="small">Nessun evento in programma oggi.</div>';
+  const todo = pois.filter(p=>!p.visited).length;
+  if(todo) h += '<div class="small mt8">🗺 '+todo+' punt'+(todo===1?'o':'i')+' ancora da visitare sulla mappa.</div>';
+  if(weatherHTML) h += '<div class="mt8" style="border-top:1px dashed var(--line);padding-top:8px">'+weatherHTML+'</div>';
+  el.innerHTML = h;
+}
+
+/* ============ MULTI-VIAGGIO ============ */
+const TRIP_KEYS = ['events','pois','expenses','budgetTotal','tripConf','ckPersonal','ckChecks','ckHidden','ckShared','notes','fbConf','fxSel'];
+let trips=[], curTrip=null;
+async function tripSnapshot(){
+  const d = {};
+  for(const k of TRIP_KEYS) d[k] = await store.get(k);
+  await store.set('tripdata:'+curTrip, d);
+}
+function renderTrips(){
+  const cur = trips.find(t=>t.id===curTrip);
+  document.getElementById('tripName').value = cur ? cur.name : '';
+  const sel = document.getElementById('tripSel');
+  sel.innerHTML = '';
+  trips.forEach(t=>sel.add(new Option(t.name+(t.id===curTrip?' (attuale)':''), t.id)));
+  sel.value = curTrip;
+}
+async function tripsInit(){
+  trips = (await store.get('trips')) || [];
+  curTrip = await store.get('currentTrip');
+  if(!curTrip || !trips.find(t=>t.id===curTrip)){
+    curTrip = curTrip || uid();
+    if(!trips.find(t=>t.id===curTrip)) trips.push({id:curTrip, name:'Il mio viaggio'});
+    await store.set('trips', trips);
+    await store.set('currentTrip', curTrip);
+  }
+  renderTrips();
+}
+document.getElementById('tripRename').addEventListener('click', async ()=>{
+  const name = document.getElementById('tripName').value.trim(); if(!name) return;
+  const cur = trips.find(t=>t.id===curTrip);
+  if(cur){ cur.name = name; await store.set('trips', trips); renderTrips(); }
+});
+document.getElementById('tripOpen').addEventListener('click', async ()=>{
+  const id = document.getElementById('tripSel').value;
+  if(!id || id===curTrip) return;
+  await tripSnapshot();                                   // salvo lo stato del viaggio corrente
+  const d = (await store.get('tripdata:'+id)) || {};
+  for(const k of TRIP_KEYS) await store.set(k, d[k]===undefined ? null : d[k]);
+  await store.set('currentTrip', id);
+  location.reload();                                      // ricarico l'app sul nuovo viaggio
+});
+document.getElementById('tripNew').addEventListener('click', async ()=>{
+  await tripSnapshot();
+  const id = uid();
+  trips.push({id, name:'Nuovo viaggio'});
+  await store.set('trips', trips);
+  for(const k of TRIP_KEYS) await store.set(k, null);     // il nuovo viaggio parte vuoto
+  await store.set('currentTrip', id);
+  location.reload();
+});
+document.getElementById('tripDel').addEventListener('click', async ()=>{
+  const id = document.getElementById('tripSel').value;
+  if(id===curTrip){ document.getElementById('tripInfo').textContent='Non puoi eliminare il viaggio aperto: aprine prima un altro.'; return; }
+  trips = trips.filter(t=>t.id!==id);
+  await store.set('trips', trips);
+  await store.set('tripdata:'+id, null);
+  renderTrips();
+  document.getElementById('tripInfo').textContent='Viaggio eliminato.';
+});
+
+/* ============ BACKUP COMPLETO ============ */
+const bkStatus = m => document.getElementById('bkStatus').textContent = m;
+document.getElementById('bkExport').addEventListener('click', async ()=>{
+  bkStatus('Preparo il backup…');
+  await tripSnapshot();
+  const out = {v:1, kind:'backup', app:'compagno-di-viaggio', data:new Date().toISOString(),
+    trips, currentTrip:curTrip,
+    theme: await store.get('theme'), userName: await store.get('userName'), fxRates: await store.get('fxRates'),
+    tripdata:{}, docs:null};
+  for(const t of trips) out.tripdata[t.id] = await store.get('tripdata:'+t.id);
+  if(document.getElementById('bkDocs').checked){
+    out.docs = {tree:docTree, blobs:{}};
+    for(const n of docTree.filter(x=>x.type==='file')){
+      bkStatus('Includo documento: '+n.name+'…');
+      const b = await blobGet(n.id);
+      if(b) out.docs.blobs[n.id] = b;
+    }
+  }
+  const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'backup-compagno-di-viaggio.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  bkStatus('Backup salvato ('+fmtSize(blob.size)+'): '+trips.length+' viaggi'+(out.docs?', documenti inclusi':'')+'. Conservalo al sicuro.');
+});
+document.getElementById('bkImportBtn').addEventListener('click', ()=>document.getElementById('bkFile').click());
+document.getElementById('bkFile').addEventListener('change', async ev=>{
+  const f = ev.target.files[0]; ev.target.value='';
+  if(!f) return;
+  let d;
+  try{ d = JSON.parse(await f.text()); }catch(e){ bkStatus('File non valido.'); return; }
+  if(!d || d.kind!=='backup'){ bkStatus('Questo non è un backup dell\'app.'); return; }
+  bkStatus('Ripristino in corso…');
+  await store.set('trips', d.trips||[]);
+  await store.set('currentTrip', d.currentTrip||null);
+  if(d.theme!==undefined) await store.set('theme', d.theme);
+  if(d.userName!==undefined) await store.set('userName', d.userName);
+  if(d.fxRates!==undefined) await store.set('fxRates', d.fxRates);
+  for(const [id, td] of Object.entries(d.tripdata||{})) await store.set('tripdata:'+id, td);
+  const cd = (d.tripdata||{})[d.currentTrip] || {};
+  for(const k of TRIP_KEYS) await store.set(k, cd[k]===undefined ? null : cd[k]);
+  if(d.docs && d.docs.tree){
+    docTree = d.docs.tree;
+    await store.set('docTree', docTree);
+    for(const [id, b] of Object.entries(d.docs.blobs||{})){ try{ await blobPut(id, b); }catch(e){} }
+  }
+  bkStatus('Ripristino completato: ricarico l\'app…');
+  setTimeout(()=>location.reload(), 900);
+});
+
+/* ---- PWA: service worker per offline e installazione (solo se pubblicata online) ---- */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+}
+
+let notesTimer=null;
+document.getElementById('notes').addEventListener('input',()=>{
+  clearTimeout(notesTimer);
+  document.getElementById('notesStatus').textContent='Salvataggio…';
+  notesTimer=setTimeout(async()=>{
+    await store.set('notes',document.getElementById('notes').value);
+    document.getElementById('notesStatus').textContent='Salvato ✓';
+  },600);
+});
+
+/* ============ AVVIO ============ */
+(async function init(){
+  const savedFx = await store.get('fxRates');
+  if(savedFx){ fxRates=savedFx.rates; fxDate=savedFx.date; }
+  const sel = await store.get('fxSel');
+  if(sel){
+    if(CURRENCIES.includes(sel.from)) fxFrom.value=sel.from;
+    if(CURRENCIES.includes(sel.to)) fxTo.value=sel.to;
+    if(sel.amount) document.getElementById('fxAmount').value=sel.amount;
+  }
+  fxStatusMsg(); fxCompute(); fxFetch();
+  await loadEvents();
+  pois = (await store.get('pois')) || [];
+  initMap(); renderPois();
+  ckPersonal = (await store.get('ckPersonal')) || [];
+  ckChecks = (await store.get('ckChecks')) || {};
+  ckHidden = (await store.get('ckHidden')) || [];
+  ckShared = (await store.get('ckShared')) || [];
+  if(!ckPersonal.length){ // migrazione dalla vecchia checklist unica
+    const old = await store.get('checklist');
+    if(old && old.length){ ckPersonal = old.map(c=>({id:c.id||uid(), text:c.text, done:!!c.done})); await store.set('ckPersonal',ckPersonal); }
+  }
+  renderCk();
+  const theme = (await store.get('theme')) || 'auto';
+  document.getElementById('themeSel').value = theme;
+  applyTheme(theme);
+  await tripsInit();
+  loadWeather();
+  renderToday();
+  try{ docIdb = await idbOpen(); }catch(e){ docIdb = null; }
+  docTree = (await store.get('docTree')) || [];
+  renderDocs();
+  const n = await store.get('notes'); if(n) document.getElementById('notes').value=n;
+  tipCompute();
+  expenses = (await store.get('expenses')) || [];
+  expenses.forEach(e=>{ if(!e.id) e.id=uid(); });
+  budgetTotal = (await store.get('budgetTotal')) || 0;
+  if(budgetTotal>0) document.getElementById('bgTotal').value = budgetTotal;
+  const tc = await store.get('tripConf');
+  if(tc){
+    if(tc.cur && (CURRENCIES.includes(tc.cur))) tripCur = tc.cur;
+    tripStart = tc.start||''; tripEnd = tc.end||'';
+    document.getElementById('bgStart').value = tripStart;
+    document.getElementById('bgEnd').value = tripEnd;
+    if(tc.dest && tc.dest.lat){
+      tripDest = tc.dest;
+      document.getElementById('bgDest').value = tripDest.name;
+      document.getElementById('bgDestInfo').textContent = '✓ '+tripDest.name;
+    }
+  }
+  bgCurSel.value = tripCur; refreshCurToggles();
+  document.getElementById('bgDate').value = new Date().toISOString().slice(0,10);
+  userName = (await store.get('userName')) || '';
+  if(userName) document.getElementById('fbName').value = userName;
+  renderBudget();
+  const fbSaved = await store.get('fbConf');
+  if(fbSaved && fbSaved.cfgText){
+    document.getElementById('fbCfg').value = fbSaved.cfgText;
+    document.getElementById('fbRoom').value = fbSaved.room;
+    fbConnect(fbSaved.cfgText, fbSaved.room, true);
+  }
+})();
+</script>
+</body>
+</html>

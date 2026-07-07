@@ -1,0 +1,18 @@
+{
+  "name": "Compagno di Viaggio",
+  "short_name": "Viaggio",
+  "description": "Budget, eventi, mappe, checklist e documenti per i tuoi viaggi — con sincronizzazione di gruppo.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F7F6",
+  "theme_color": "#16343A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
