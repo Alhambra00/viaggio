@@ -1296,8 +1296,7 @@ function addExpense(rawAmt, mode, cat, note, shared, dateStr){
   saveBudget();
   return true;
 }
-function bgChartSVG(){
-  if(!expenses.length) return '<div class="empty">Nessuna spesa registrata: i grafici appariranno qui.</div>';
+function bgSeries(){
   const byDay = {};
   [...expenses].sort((a,b)=>a.date<b.date?-1:1).forEach(e=>{
     const d = e.date.slice(0,10); byDay[d] = (byDay[d]||0) + e.amt;
@@ -1305,43 +1304,89 @@ function bgChartSVG(){
   const days = Object.keys(byDay).sort();
   const show = days.slice(-14);
   let cum = days.slice(0, days.length-show.length).reduce((s,d)=>s+byDay[d],0);
-  const pts = show.map(d=>{ cum += byDay[d]; return {d, day:byDay[d], cum}; });
+  return show.map(d=>{ cum += byDay[d]; return {d, day:byDay[d], cum}; });
+}
+function bgAdaptiveDaily(){
+  const daysN = tripDays();
+  if(!(budgetTotal>0 && daysN>0)) return 0;
+  const today = new Date().toISOString().slice(0,10);
+  const spentToday = expenses.filter(e=>e.date.slice(0,10)===today).reduce((s,e)=>s+e.amt,0);
+  const spentBefore = expenses.reduce((s,e)=>s+e.amt,0) - spentToday;
+  let remDays;
+  if(today < tripStart) remDays = daysN;
+  else if(today > tripEnd) return 0;
+  else remDays = Math.round((new Date(tripEnd) - new Date(today))/86400000) + 1;
+  return remDays>0 ? Math.max(budgetTotal - spentBefore, 0)/remDays : 0;
+}
+function bgChartSVG(){
+  if(!expenses.length) return '<div class="empty">Nessuna spesa registrata: i grafici appariranno qui.</div>';
+  const pts = bgSeries();
+  const W=210, H=150, padL=8, padB=18, padT=12;
+  const lbl = i => (pts.length<=7 || i%2===0);
+  const mkY = maxY => (v => H-padB - (v/maxY)*(H-padB-padT));
+
+  // --- COMPLESSIVO: un'unica curva sempre crescente (totale cumulato) ---
+  const maxA = Math.max(budgetTotal||0, pts[pts.length-1].cum) * 1.1 || 1;
+  const yA = mkY(maxA);
+  const cw = (W-padL*2)/Math.max(pts.length,1);
+  const X = i => pts.length>1 ? padL + i*(W-padL*2)/(pts.length-1) : W/2;
+  let svgA = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  const linePts = pts.map((p,i)=>X(i)+','+yA(p.cum)).join(' ');
+  svgA += '<path d="M'+X(0)+','+(H-padB)+' L'+pts.map((p,i)=>X(i)+','+yA(p.cum)).join(' L')+' L'+X(pts.length-1)+','+(H-padB)+' Z" fill="#2E6E6A" opacity="0.15"/>';
+  svgA += '<polyline fill="none" stroke="#2E6E6A" stroke-width="2.5" points="'+linePts+'"/>';
+  pts.forEach((p,i)=>{ svgA += '<circle cx="'+X(i)+'" cy="'+yA(p.cum)+'" r="2.5" fill="'+(budgetTotal>0&&p.cum>budgetTotal?'#E4573D':'#2E6E6A')+'"/>'; });
+  if(budgetTotal>0) svgA += '<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yA(budgetTotal)+'" y2="'+yA(budgetTotal)+'" stroke="#D9A441" stroke-width="1.5" stroke-dasharray="5 4"/>'+
+    '<text x="'+(W-padL)+'" y="'+(yA(budgetTotal)-3)+'" text-anchor="end" font-size="8" font-family="monospace" fill="#D9A441">budget</text>';
+  pts.forEach((p,i)=>{ if(lbl(i)) svgA += '<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="#4A6468">'+p.d.slice(8,10)+'/'+p.d.slice(5,7)+'</text>'; });
+  svgA += '</svg>';
+
+  // --- GIORNALIERO: solo il giorno corrente ---
+  const todayStr = new Date().toISOString().slice(0,10);
+  const spentToday = expenses.filter(e=>e.date.slice(0,10)===todayStr).reduce((s,e)=>s+e.amt,0);
+  const daily = bgAdaptiveDaily();
+  const maxB = Math.max(daily, spentToday) * 1.2 || 1;
+  const yB = mkY(maxB);
+  let svgB = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  const bx = W/2-32;
+  svgB += '<rect x="'+bx+'" y="'+yB(spentToday)+'" width="64" height="'+(H-padB-yB(spentToday))+'" rx="4" fill="'+(daily>0&&spentToday>daily?'#E4573D':'#2E6E6A')+'" opacity="0.9"/>';
+  svgB += '<text x="'+(W/2)+'" y="'+(yB(spentToday)-5)+'" text-anchor="middle" font-size="11" font-weight="bold" font-family="monospace" fill="'+(daily>0&&spentToday>daily?'#E4573D':'#2E6E6A')+'">'+Math.round(spentToday)+' €</text>';
+  if(daily>0) svgB += '<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yB(daily)+'" y2="'+yB(daily)+'" stroke="#D9A441" stroke-width="1.5" stroke-dasharray="5 4"/>'+
+    '<text x="'+(W-padL)+'" y="'+(yB(daily)-3)+'" text-anchor="end" font-size="8" font-family="monospace" fill="#D9A441">'+Math.round(daily)+' €/g</text>';
+  svgB += '<text x="'+(W/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="#4A6468">oggi '+todayStr.slice(8,10)+'/'+todayStr.slice(5,7)+'</text></svg>';
+
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">COMPLESSIVO</div>'+svgA+'</div>'+
+    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">GIORNALIERO · OGGI</div>'+svgB+'</div></div>'+
+    '<div class="small mt8">A sinistra il totale cumulato del viaggio (curva sempre crescente, con la linea del budget); a destra la spesa di oggi rispetto al budget giornaliero.</div>'+
+    bgDayByDayHTML() + bgCatHTML();
+}
+function bgDayByDayHTML(){
+  const open = collState['bgdays']===true;
+  const head = '<div class="mt12" style="border-top:1px dashed var(--line);padding-top:10px">'+
+    '<div id="bgDaysToggle" style="cursor:pointer;padding:8px 0;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)">'+
+    '<span style="color:var(--teal)">'+(open?'▾':'▸')+'</span> Andamento giorno per giorno</div>';
+  if(!open) return head+'</div>';
+  const pts = bgSeries();
   const daysN = tripDays();
   const baseDaily = (budgetTotal>0 && daysN>0) ? budgetTotal/daysN : 0;
   const W=210, H=150, padL=6, padB=18, padT=12, cw=(W-padL*2)/pts.length;
   const lbl = i => (pts.length<=7 || i%2===0);
   const mkY = maxY => (v => H-padB - (v/maxY)*(H-padB-padT));
-  const xAxis = () => pts.map((p,i)=> lbl(i)?'<text x="'+(padL+i*cw+cw/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="#4A6468">'+p.d.slice(8,10)+'/'+p.d.slice(5,7)+'</text>':'').join('');
-
-  // --- complessivo: barre cumulate + linea budget ---
-  const maxA = Math.max(budgetTotal||0, pts[pts.length-1].cum) * 1.1 || 1;
-  const yA = mkY(maxA);
-  let svgA = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
-  pts.forEach((p,i)=>{
-    const x = padL+i*cw;
-    svgA += '<rect x="'+(x+cw*0.16)+'" y="'+yA(p.cum)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yA(p.cum))+'" rx="2" fill="'+(budgetTotal>0&&p.cum>budgetTotal?'#E4573D':'#2E6E6A')+'" opacity="0.9"/>';
-  });
-  if(budgetTotal>0) svgA += '<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yA(budgetTotal)+'" y2="'+yA(budgetTotal)+'" stroke="#D9A441" stroke-width="1.5" stroke-dasharray="5 4"/>'+
-    '<text x="'+(W-padL)+'" y="'+(yA(budgetTotal)-3)+'" text-anchor="end" font-size="8" font-family="monospace" fill="#D9A441">budget</text>';
-  svgA += xAxis()+'</svg>';
-
-  // --- giornaliero: barre per giorno + linea budget/giorno (scala diversa) ---
-  const maxB = Math.max(baseDaily, ...pts.map(p=>p.day)) * 1.15 || 1;
-  const yB = mkY(maxB);
-  let svgB = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
-  pts.forEach((p,i)=>{
-    const x = padL+i*cw;
-    svgB += '<rect x="'+(x+cw*0.16)+'" y="'+yB(p.day)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yB(p.day))+'" rx="2" fill="'+(baseDaily>0&&p.day>baseDaily?'#E4573D':'#D9A441')+'" opacity="0.9"/>';
-  });
-  if(baseDaily>0) svgB += '<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yB(baseDaily)+'" y2="'+yB(baseDaily)+'" stroke="#2E6E6A" stroke-width="1.5" stroke-dasharray="5 4"/>'+
-    '<text x="'+(W-padL)+'" y="'+(yB(baseDaily)-3)+'" text-anchor="end" font-size="8" font-family="monospace" fill="#2E6E6A">'+Math.round(baseDaily)+' €/g</text>';
-  svgB += xAxis()+'</svg>';
-
-  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
-    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">COMPLESSIVO</div>'+svgA+'</div>'+
-    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">GIORNALIERO</div>'+svgB+'</div></div>'+
-    '<div class="small mt8">A sinistra il totale cumulato (con la linea del budget), a destra quanto hai speso ogni singolo giorno (con la linea del budget medio giornaliero). Le barre rosse superano il limite. Scale indipendenti, ultimi 14 giorni.</div>'+
-    bgCatHTML();
+  const xAxis = y => pts.map((p,i)=> lbl(i)?'<text x="'+(padL+i*cw+cw/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="#4A6468">'+p.d.slice(8,10)+'/'+p.d.slice(5,7)+'</text>':'').join('');
+  const maxA = Math.max(budgetTotal||0, pts[pts.length-1].cum)*1.1||1, yA=mkY(maxA);
+  let sA='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  pts.forEach((p,i)=>{ sA+='<rect x="'+(padL+i*cw+cw*0.16)+'" y="'+yA(p.cum)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yA(p.cum))+'" rx="2" fill="'+(budgetTotal>0&&p.cum>budgetTotal?'#E4573D':'#2E6E6A')+'" opacity="0.9"/>'; });
+  if(budgetTotal>0) sA+='<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yA(budgetTotal)+'" y2="'+yA(budgetTotal)+'" stroke="#D9A441" stroke-width="1.5" stroke-dasharray="5 4"/>';
+  sA+=xAxis()+'</svg>';
+  const maxB = Math.max(baseDaily, ...pts.map(p=>p.day))*1.15||1, yB=mkY(maxB);
+  let sB='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  pts.forEach((p,i)=>{ sB+='<rect x="'+(padL+i*cw+cw*0.16)+'" y="'+yB(p.day)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yB(p.day))+'" rx="2" fill="'+(baseDaily>0&&p.day>baseDaily?'#E4573D':'#D9A441')+'" opacity="0.9"/>'; });
+  if(baseDaily>0) sB+='<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yB(baseDaily)+'" y2="'+yB(baseDaily)+'" stroke="#2E6E6A" stroke-width="1.5" stroke-dasharray="5 4"/>';
+  sB+=xAxis()+'</svg>';
+  return head+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" class="mt8">'+
+    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">CUMULATO</div>'+sA+'</div>'+
+    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">SPESA PER GIORNO</div>'+sB+'</div></div>'+
+    '<div class="small mt8">Ultimi 14 giorni: barre rosse dove superi il budget.</div></div>';
 }
 function bgCatHTML(){
   const byCat = {};
@@ -2285,22 +2330,34 @@ function collApply(el, open){
 }
 async function collInit(){
   collState = (await store.get('collapsed')) || {};
+  const defaultOpen = {bggroup:true};                 // il gruppo resta visibile di default
   document.querySelectorAll('.eyebrow.coll').forEach(el=>{
     const k = el.dataset.coll;
-    collApply(el, collState[k]===true);            // default: chiusa
+    const isOpen = () => collState[k]===undefined ? !!defaultOpen[k] : collState[k]===true;
+    collApply(el, isOpen());
     el.addEventListener('click', async ()=>{
-      collState[k] = !(collState[k]===true);
+      collState[k] = !isOpen();
       collApply(el, collState[k]===true);
       await store.set('collapsed', collState);
     });
   });
 }
+/* ---- lo spazio in fondo si adatta all'altezza reale della barra tab (fix taglio) ---- */
+function fixNavPadding(){
+  const nav = document.querySelector('nav.tabs');
+  if(!nav) return;
+  const h = nav.offsetHeight || 70;
+  document.body.style.paddingBottom = (h + 34) + 'px';
+  document.getElementById('undoBar').style.bottom = (h + 14) + 'px';
+}
+window.addEventListener('resize', fixNavPadding);
+window.addEventListener('load', ()=>{ fixNavPadding(); setTimeout(fixNavPadding, 600); });
 
 /* ============ GRAFICO CATEGORIE DEL GIORNO (sotto-sezione a tendina) ============ */
 let dayCatOpen = false, dayCatDate = new Date().toISOString().slice(0,10);
 function bgDayCatHTML(){
   const head = '<div class="mt12" style="border-top:1px dashed var(--line);padding-top:10px">'+
-    '<div id="dayCatToggle" style="cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)">'+
+    '<div id="dayCatToggle" style="cursor:pointer;padding:8px 0;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)">'+
     '<span style="color:var(--teal)">'+(dayCatOpen?'▾':'▸')+'</span> Spese del giorno per categoria</div>';
   if(!dayCatOpen) return head+'</div>';
   const dEx = expenses.filter(e=>e.date.slice(0,10)===dayCatDate);
@@ -2308,7 +2365,7 @@ function bgDayCatHTML(){
   dEx.forEach(e=>{ byCat[e.cat] = (byCat[e.cat]||0) + e.amt; });
   const cats = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
   const tot = dEx.reduce((s,e)=>s+e.amt,0);
-  let body = '<div class="row mt8"><input type="date" id="dayCatDate" value="'+dayCatDate+'" style="flex:1">'+
+  let body = '<div class="row" style="margin-top:14px"><input type="date" id="dayCatDate" value="'+dayCatDate+'" style="flex:1">'+
     '<button class="btn btn-ghost" id="dayCatToday" style="min-width:60px">Oggi</button></div>';
   if(!cats.length) body += '<div class="empty mt8">Nessuna spesa in questo giorno.</div>';
   else{
@@ -2323,6 +2380,7 @@ function bgDayCatHTML(){
   return head + body + '</div>';
 }
 document.getElementById('bgChart').addEventListener('click', e=>{
+  if(e.target.closest('#bgDaysToggle')){ collState['bgdays'] = !(collState['bgdays']===true); store.set('collapsed', collState); renderBudget(); return; }
   if(e.target.closest('#dayCatToggle')){ dayCatOpen = !dayCatOpen; renderBudget(); }
   if(e.target.closest('#dayCatToday')){ dayCatDate = new Date().toISOString().slice(0,10); renderBudget(); }
 });
