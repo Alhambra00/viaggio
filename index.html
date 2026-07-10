@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#16343A">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Compagno di Viaggio</title>
@@ -214,6 +214,9 @@ nav.tabs .ic{font-size:19px;line-height:1}
     </div>
   </div>
 
+  <div class="eyebrow" id="homeDebtsHead" style="display:none">Conti col gruppo</div>
+  <div class="card" id="homeDebts" style="display:none"></div>
+
   <div class="eyebrow coll" data-coll="calc">Calcolatrice rapida</div>
   <div class="card">
     <div class="calc-display"><span class="calc-expr" id="calcExpr">&nbsp;</span><span id="calcOut">0</span></div>
@@ -330,11 +333,12 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <label class="row mt8" id="bgSharedWrap" style="display:none;font-size:13px;color:var(--ink-soft)">
       <input type="checkbox" id="bgShared" style="width:18px;height:18px;accent-color:var(--teal)"> Condividi col gruppo di viaggio
     </label>
-    <div class="row mt8" id="bgSplitRow" style="display:none">
-      <div class="small" style="flex:1">Divisa tra quante persone? (te incluso)</div>
-      <input type="number" id="bgSplit" inputmode="numeric" min="1" value="2" style="max-width:80px">
+    <div class="mt8" id="bgWithBox" style="display:none">
+      <div class="small" style="font-weight:600">Con chi dividi questa spesa? (tu sei sempre incluso)</div>
+      <div id="bgWithList"></div>
+      <div class="small mt8" id="bgWithCount"></div>
+      <div class="small" id="bgSplitInfo">Sul tuo budget peserà solo la tua quota. Gli altri vedranno il proprio debito in Home e nel Budget, e tu dovrai confermare i pagamenti ricevuti.</div>
     </div>
-    <div class="small mt8" id="bgSplitInfo" style="display:none">Sul tuo budget personale peserà solo la tua quota (importo ÷ persone).</div>
     <button class="btn btn-primary mt8" id="bgAdd" style="width:100%">+ Registra spesa</button>
     <button class="btn btn-ghost mt8" id="bgCancelEdit" style="width:100%;display:none">Annulla modifica</button>
   </div>
@@ -1218,13 +1222,22 @@ async function fbConnect(cfgText, room, silent){
     R('events').on('value', async s=>{ events = Object.values(s.val()||{}); await store.set('events',events); renderEvents(); });
     R('pois').on('value', async s=>{ pois = Object.values(s.val()||{}); await store.set('pois',pois); renderPois(); });
     R('checklist').on('value', async s=>{ ckShared = Object.values(s.val()||{}); await store.set('ckShared',ckShared); renderCk(); });
-    R('spese').on('value', s=>{ groupExpenses = Object.values(s.val()||{}); renderGroup(); });
+    R('spese').on('value', async s=>{
+      groupExpenses = Object.values(s.val()||{});
+      /* riporto gli stati pagato/confermato nella copia locale delle mie spese */
+      let touched = false;
+      groupExpenses.forEach(g=>{
+        const l = expenses.find(x=>String(x.id)===String(g.id));
+        if(l && JSON.stringify(l.sharedWith||null)!==JSON.stringify(g.sharedWith||null)){ l.sharedWith = g.sharedWith||null; touched = true; }
+      });
+      if(touched) await store.set('expenses', expenses);
+      renderGroup();
+    });
     R('membri').on('value', s=>{
       const v = s.val()||{};
       members = Object.entries(v).map(([id,m])=>({id, name:(m&&m.name)||'?'}));
-      renderGroup();
+      renderGroup(); bgWithRefresh();
     });
-    R('conto/esclusi').on('value', s=>{ exclSet = s.val()||{}; renderGroup(); });
     fb.on = true;
     userName = document.getElementById('fbName').value.trim() || userName || 'Io';
     await store.set('userName', userName);
@@ -1243,9 +1256,9 @@ document.getElementById('fbConnectBtn').addEventListener('click', ()=>{
   fbConnect(document.getElementById('fbCfg').value, document.getElementById('fbRoom').value);
 });
 document.getElementById('fbOffBtn').addEventListener('click', async ()=>{
-  if(fb.on){ try{ ['events','pois','checklist','spese','membri','conto/esclusi'].forEach(c=>R(c).off()); }catch(e){} }
+  if(fb.on){ try{ ['events','pois','checklist','spese','membri'].forEach(c=>R(c).off()); }catch(e){} }
   fb.on = false;
-  groupExpenses = []; members = []; exclSet = {};
+  groupExpenses = []; members = [];
   document.getElementById('bgSharedWrap').style.display = 'none';
   document.getElementById('ckAllWrap').style.display = 'none';
   document.getElementById('liveBadge').classList.remove('on');
@@ -1283,9 +1296,13 @@ async function saveBudget(){
   await store.set('tripConf', {cur:tripCur, start:tripStart, end:tripEnd, dest:tripDest});
   renderBudget();
 }
-/* quota personale di una spesa: importo ÷ persone (le spese di gruppo pesano sul TUO budget solo per la tua parte) */
-const expShare = e => e.amt / Math.max(1, e.split||1);
-function addExpense(rawAmt, mode, cat, note, shared, dateStr, split){
+/* partecipanti di una spesa: chi la divide con te (sharedWith) + te. Retro-compatibile col vecchio campo split. */
+const expParts = e => (e.sharedWith && typeof e.sharedWith==='object' && Object.keys(e.sharedWith).length)
+  ? Object.keys(e.sharedWith).length + 1
+  : Math.max(1, e.split||1);
+/* quota personale: importo ÷ partecipanti (le spese di gruppo pesano sul TUO budget solo per la tua parte) */
+const expShare = e => e.amt / expParts(e);
+function addExpense(rawAmt, mode, cat, note, shared, dateStr, withList){
   let amtEur = rawAmt, orig = null;
   if(mode==='trip' && tripCur!=='EUR'){
     const r = tripRate();
@@ -1295,8 +1312,10 @@ function addExpense(rawAmt, mode, cat, note, shared, dateStr, split){
   }
   const today = new Date().toISOString().slice(0,10);
   const date = (dateStr && dateStr!==today) ? dateStr+'T12:00:00' : new Date().toISOString();
+  const sharedWith = {};
+  if(shared) (withList||[]).forEach(m=>{ if(m && m.id) sharedWith[m.id] = {name:m.name||'?', paid:false, confirmed:false}; });
   const e = {id:uid(), amt:amtEur, orig, cat, note:note||'', date, by:userName||'Io', byId:deviceId, shared:!!shared,
-    split: shared ? Math.max(1, Math.round(+split)||1) : 1};
+    sharedWith: (shared && Object.keys(sharedWith).length) ? sharedWith : null};
   expenses.push(e);
   if(shared && fb.on){ try{ R('spese/'+e.id).set(e); }catch(err){} }
   saveBudget();
@@ -1475,7 +1494,7 @@ function renderBudget(){
   if(!shownExp.length){ list.innerHTML = '<div class="empty">'+(bgFilterVal?'Nessuna spesa in questo giorno.':'Nessuna spesa. Aggiungila qui o dalla Home.')+'</div>'; }
   else{
     list.innerHTML = [...shownExp].sort((a,b)=>a.date<b.date?1:-1).map(e=>{
-      const nSplit = Math.max(1, e.split||1);
+      const nSplit = expParts(e);
       const full = e.orig ? fmtCur(e.orig.amt, e.orig.cur)+' (≈ '+eur(e.amt)+')' : both(e.amt);
       const shown = nSplit>1 ? both(expShare(e)) : full;
       const badge = e.shared ? ' <span class="badge">gruppo'+(nSplit>1?' ÷'+nSplit:'')+'</span>' : '';
@@ -1488,79 +1507,130 @@ function renderBudget(){
   }
   renderGroup();
 }
-let members=[], exclSet={};
-const memberKey = s => String(s).replace(/[.#$\/\[\]\s]/g,'_');
+let members=[];
+const gName = id => { const m = members.find(x=>x.id===id); return m ? m.name : null; };
+const isMineExp = e => (e.byId && e.byId===deviceId) || (!e.byId && e.by===userName && e.by!=='Io');
+const expLabel = e => esc(e.cat)+(e.note?' · '+esc(e.note):'')+' · '+new Date(e.date).toLocaleDateString('it-IT',{day:'numeric',month:'short'});
+
 function renderGroup(){
   const el = document.getElementById('bgGroup');
-  if(!fb.on){ el.innerHTML = '<div class="empty">Attiva la Sincronizzazione live (⚙️ in alto a destra) per vedere le spese condivise da chi ha lo stesso codice viaggio.</div>'; return; }
+  if(!fb.on){
+    el.innerHTML = '<div class="empty">Attiva la Sincronizzazione live (⚙️ in alto a destra) per vedere le spese condivise da chi ha lo stesso codice viaggio.</div>';
+    renderHomeDebts(); return;
+  }
 
-  // persone = membri della stanza + eventuali autori di spese non registrati come membri
-  const persons = members.map(m=>({key:m.id, name:m.name}));
-  groupExpenses.forEach(e=>{
-    const matched = e.byId && persons.some(p=>p.key===e.byId);
-    const byName = !e.byId && persons.some(p=>p.name===e.by);
-    if(!matched && !byName) persons.push({key: e.byId || 'n_'+memberKey(e.by||'?'), name: e.by||'?'});
-  });
-  const paid = {};
-  persons.forEach(p=>paid[p.key]=0);
-  groupExpenses.forEach(e=>{
-    const p = persons.find(x=> (e.byId && x.key===e.byId) || (!e.byId && x.name===e.by));
-    if(p) paid[p.key] += e.amt;
-  });
-  const tot = groupExpenses.reduce((s,e)=>s+e.amt,0);
-  const participants = persons.filter(p=>!exclSet[p.key]);
-  const share = participants.length ? tot/participants.length : 0;
-
-  let html = '<div class="small" style="font-weight:600">👥 Nella stanza: '+persons.length+' — spunta chi partecipa alla divisione</div>';
-  html += persons.map(p=>{
-    const inCalc = !exclSet[p.key];
-    const net = paid[p.key] - (inCalc ? share : 0);
-    return '<label class="row" style="margin-top:6px;font-size:13px;gap:8px">'+
-      '<input type="checkbox" data-excl="'+p.key+'" '+(inCalc?'checked':'')+' style="width:18px;height:18px;accent-color:var(--teal)">'+
-      '<span style="flex:1">'+esc(p.name)+(p.key===deviceId?' (tu)':'')+(inCalc?'':' — escluso')+'</span>'+
-      '<span style="font-family:var(--mono);font-size:11px">pagato '+eur(paid[p.key])+(inCalc?' · saldo '+(net>=0?'+':'')+eur(net):'')+'</span></label>';
-  }).join('');
+  let html = '<div class="small" style="font-weight:600">👥 Nella stanza: '+members.length+
+    (members.length ? ' — '+members.map(m=>esc(m.name)+(m.id===deviceId?' (tu)':'')).join(', ') : '')+'</div>';
 
   if(!groupExpenses.length){
     el.innerHTML = html + '<div class="empty mt8">Nessuna spesa di gruppo ancora. Spunta «Condividi col gruppo» quando ne registri una.</div>';
-    return;
+    renderHomeDebts(); return;
   }
 
-  html += '<div class="result-big mt8">'+both(tot)+' totali di gruppo</div>'+
-    '<div class="small">Quota: '+both(share)+' a testa ('+participants.length+' partecipanti)</div>';
+  const tot = groupExpenses.reduce((s,e)=>s+e.amt,0);
+  html += '<div class="result-big mt8">'+both(tot)+' totali di gruppo</div>';
 
-  html += [...groupExpenses].sort((a,b)=>a.date<b.date?1:-1).map(e=>
-    '<div class="item"><div><div class="t">'+both(e.amt)+' · '+esc(e.cat)+'</div>'+
-    '<div class="s">'+esc(e.by||'?')+' · '+new Date(e.date).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+(e.note?' · '+esc(e.note):'')+'</div></div>'+
-    (((e.byId && e.byId===deviceId) || (!e.byId && e.by===userName && e.by!=='Io'))?'<div class="acts"><button class="icon-btn del" data-del-grp="'+e.id+'" title="Elimina">✕</button></div>':'')+
-    '</div>'
-  ).join('');
+  // ---- debiti aperti: chi deve cosa a chi (quote non ancora segnate come pagate) ----
+  const owe = {};
+  groupExpenses.forEach(e=>{
+    if(!e.sharedWith) return;
+    const q = expShare(e);
+    Object.entries(e.sharedWith).forEach(([id,st])=>{
+      st = st||{};
+      if(st.paid) return;
+      const k = id+'>'+(e.byId||e.by||'?');
+      if(!owe[k]) owe[k] = {from: st.name||gName(id)||'?', to: e.by||gName(e.byId)||'?', amt:0};
+      owe[k].amt += q;
+    });
+  });
+  const debts = Object.values(owe).filter(d=>d.amt>0.005);
+  html += '<div class="small mt8" style="border-top:1px dashed var(--line);padding-top:8px"><b>Debiti aperti</b>:<br>'+
+    (debts.length ? debts.map(d=>esc(d.from)+' → '+esc(d.to)+': '+both(d.amt)).join('<br>') : 'nessuno ✓')+'</div>';
 
-  // pareggio: chi deve a chi (numero minimo di trasferimenti)
-  const bal = persons.map(p=>({name:p.name, net: paid[p.key] - (exclSet[p.key]?0:share)})).sort((a,b)=>a.net-b.net);
-  const transfers=[]; let i=0, j=bal.length-1;
-  while(i<j){
-    const amt = Math.min(-bal[i].net, bal[j].net);
-    if(amt>0.005) transfers.push({from:bal[i].name, to:bal[j].name, amt});
-    bal[i].net += amt; bal[j].net -= amt;
-    if(bal[i].net > -0.005) i++;
-    if(bal[j].net < 0.005) j--;
-  }
-  html += '<div class="small mt8" style="border-top:1px dashed var(--line);padding-top:8px"><b>Pareggio conti</b>: '+
-    (transfers.length ? transfers.map(t=>esc(t.from)+' → '+esc(t.to)+': '+both(t.amt)).join('<br>') : 'siete già pari ✓')+'</div>';
+  // ---- elenco spese con stato di ogni partecipante ----
+  html += [...groupExpenses].sort((a,b)=>a.date<b.date?1:-1).map(e=>{
+    const mine = isMineExp(e);
+    let head = '<div class="row" style="align-items:flex-start"><div style="flex:1">'+
+      '<div class="t" style="font-weight:600">'+both(e.amt)+' · '+esc(e.cat)+'</div>'+
+      '<div class="s" style="font-size:12px;color:var(--ink-soft);font-family:var(--mono);margin-top:2px">'+
+      esc(e.by||'?')+(mine?' (tu)':'')+' · '+new Date(e.date).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+(e.note?' · '+esc(e.note):'')+'</div></div>'+
+      (mine?'<div class="acts"><button class="icon-btn del" data-del-grp="'+e.id+'" title="Elimina">✕</button></div>':'')+'</div>';
+
+    let rows = '';
+    if(e.sharedWith){
+      const q = expShare(e), n = expParts(e);
+      rows = '<div class="s" style="font-size:11px;color:var(--ink-soft);font-family:var(--mono);margin-top:4px">Divisa tra '+n+' · quota '+eur(q)+'</div>';
+      rows += Object.entries(e.sharedWith).map(([id,st])=>{
+        st = st||{};
+        const nm = esc(st.name||gName(id)||'?')+(id===deviceId?' (tu)':'');
+        let stato, act='';
+        if(st.confirmed) stato = '<span style="color:var(--teal)">✓ saldato</span>';
+        else if(st.paid){
+          stato = 'pagato · in attesa di conferma';
+          if(mine) act = '<button class="btn btn-ghost" data-conf="'+esc(e.id)+'|'+esc(id)+'" style="padding:3px 10px;font-size:11px;min-width:0">Conferma ricevuto</button>';
+          else if(id===deviceId) act = '<button class="btn btn-ghost" data-unpay="'+esc(e.id)+'" style="padding:3px 10px;font-size:11px;min-width:0">Annulla</button>';
+        }else{
+          stato = 'deve '+eur(q);
+          if(id===deviceId) act = '<label class="row" style="gap:5px;font-size:12px"><input type="checkbox" data-pay="'+esc(e.id)+'" style="width:17px;height:17px;accent-color:var(--teal)">pagato</label>';
+        }
+        return '<div class="row" style="margin-top:4px;font-size:12px;gap:8px"><span style="flex:1">'+nm+' — '+stato+'</span>'+act+'</div>';
+      }).join('');
+    }else{
+      rows = '<div class="s" style="font-size:11px;color:var(--ink-soft);font-family:var(--mono);margin-top:4px">Vecchio formato: senza elenco partecipanti'+(mine?' (aprila in modifica da «Le mie spese» per aggiungerli)':'')+'</div>';
+    }
+    return '<div style="border-bottom:1px dashed var(--line);padding:10px 0">'+head+rows+'</div>';
+  }).join('');
 
   el.innerHTML = html;
+  renderHomeDebts();
 }
-document.getElementById('bgGroup').addEventListener('change', async ev=>{
-  const x = ev.target.closest('[data-excl]'); if(!x) return;
-  const key = x.dataset.excl;
-  if(fb.on){
-    try{
-      if(x.checked) R('conto/esclusi/'+key).remove();   // partecipa
-      else R('conto/esclusi/'+key).set(true);           // escluso
-    }catch(e){}
-  }
-});
+
+/* ---- Home: crediti e debiti aperti sopra la calcolatrice rapida ---- */
+function renderHomeDebts(){
+  const head = document.getElementById('homeDebtsHead'), box = document.getElementById('homeDebts');
+  if(!head || !box) return;
+  const items = [];
+  if(fb.on) groupExpenses.forEach(e=>{
+    if(!e.sharedWith) return;
+    const q = expShare(e);
+    if(isMineExp(e)){
+      Object.entries(e.sharedWith).forEach(([id,st])=>{
+        st = st||{};
+        if(st.confirmed) return;   // saldato e confermato: sparisce dalla Home
+        const nm = esc(st.name||gName(id)||'?');
+        if(st.paid) items.push('<div class="row" style="margin-top:6px;font-size:13px;gap:8px"><span style="flex:1">💶 '+nm+' ha segnato <b>pagato</b> '+eur(q)+' ('+expLabel(e)+')</span>'+
+          '<button class="btn btn-ghost" data-conf="'+esc(e.id)+'|'+esc(id)+'" style="padding:3px 10px;font-size:11px;min-width:0">Conferma</button></div>');
+        else items.push('<div style="margin-top:6px;font-size:13px">💶 '+nm+' ti deve '+eur(q)+' ('+expLabel(e)+')</div>');
+      });
+    }else if(e.sharedWith[deviceId]){
+      const st = e.sharedWith[deviceId]||{};
+      if(st.paid) return;   // hai già assolto: sparisce dalla Home (resta tracciato nel Budget)
+      items.push('<label class="row" style="margin-top:6px;font-size:13px;gap:8px">'+
+        '<input type="checkbox" data-pay="'+esc(e.id)+'" style="width:18px;height:18px;accent-color:var(--teal)">'+
+        '<span style="flex:1">Devi '+eur(q)+' a '+esc(e.by||'?')+' ('+expLabel(e)+') — spunta quando paghi</span></label>');
+    }
+  });
+  if(!items.length){ head.style.display='none'; box.style.display='none'; box.innerHTML=''; return; }
+  head.style.display='flex'; box.style.display='block';
+  box.innerHTML = items.join('');
+}
+
+/* ---- azioni condivise (Home e Budget): segna pagato / conferma ricevuto ---- */
+async function groupPayChange(ev){
+  const x = ev.target.closest('[data-pay]'); if(!x) return;
+  if(fb.on){ try{ await R('spese/'+x.dataset.pay+'/sharedWith/'+deviceId+'/paid').set(!!x.checked); }catch(e){} }
+}
+async function groupConfClick(ev){
+  const u = ev.target.closest('[data-unpay]');
+  if(u){ if(fb.on){ try{ await R('spese/'+u.dataset.unpay+'/sharedWith/'+deviceId+'/paid').set(false); }catch(e){} } return; }
+  const c = ev.target.closest('[data-conf]'); if(!c) return;
+  const [eid, mid] = c.dataset.conf.split('|');
+  if(fb.on){ try{ await R('spese/'+eid+'/sharedWith/'+mid+'/confirmed').set(true); }catch(e){} }
+}
+document.getElementById('bgGroup').addEventListener('change', groupPayChange);
+document.getElementById('bgGroup').addEventListener('click', groupConfClick);
+document.getElementById('homeDebts').addEventListener('change', groupPayChange);
+document.getElementById('homeDebts').addEventListener('click', groupConfClick);
 document.getElementById('bgSet').addEventListener('click', async ()=>{
   const v = parseFloat(document.getElementById('bgTotal').value);
   if(!isNaN(v) && v>=0){ budgetTotal = v; await saveBudget(); }
@@ -1603,16 +1673,42 @@ function refreshCurToggles(){
 bgCurSel.addEventListener('change', async ()=>{ tripCur = bgCurSel.value; refreshCurToggles(); await saveBudget(); });
 document.getElementById('bgStart').addEventListener('change', async e=>{ tripStart = e.target.value; await saveBudget(); });
 document.getElementById('bgEnd').addEventListener('change', async e=>{ tripEnd = e.target.value; await saveBudget(); });
-/* il flag «Condividi col gruppo» mostra il campo persone; default = membri della stanza (min 2) */
-function bgSplitUI(){
+/* il flag «Condividi col gruppo» mostra l'elenco dei membri con cui dividere; default tutti spuntati */
+function bgWithUI(sel){   /* sel: Set di id da spuntare, oppure null = tutti */
   const on = document.getElementById('bgShared').checked;
-  document.getElementById('bgSplitRow').style.display = on ? 'flex' : 'none';
-  document.getElementById('bgSplitInfo').style.display = on ? 'block' : 'none';
-  const inp = document.getElementById('bgSplit');
-  if(on && !inp.dataset.touched) inp.value = Math.max(2, members.length||0);
+  const box = document.getElementById('bgWithBox');
+  box.style.display = on ? 'block' : 'none';
+  if(!on) return;
+  const list = document.getElementById('bgWithList');
+  const others = members.filter(m=>m.id!==deviceId);
+  if(!others.length){
+    list.innerHTML = '<div class="empty">Nessun altro membro nella stanza al momento: la spesa entrerà nel gruppo ma senza divisione.</div>';
+    bgWithCount(); return;
+  }
+  list.innerHTML = others.map(m=>
+    '<label class="row" style="margin-top:6px;font-size:13px;gap:8px">'+
+    '<input type="checkbox" data-with="'+esc(m.id)+'" data-name="'+esc(m.name)+'" '+((!sel || sel.has(m.id))?'checked':'')+' style="width:18px;height:18px;accent-color:var(--teal)">'+
+    '<span style="flex:1">'+esc(m.name)+'</span></label>'
+  ).join('');
+  bgWithCount();
 }
-document.getElementById('bgShared').addEventListener('change', bgSplitUI);
-document.getElementById('bgSplit').addEventListener('input', e=>{ e.target.dataset.touched = '1'; });
+function bgWithRefresh(){   /* i membri della stanza sono cambiati: ridisegno preservando le spunte */
+  if(document.getElementById('bgWithBox').style.display==='none') return;
+  const boxes = [...document.querySelectorAll('#bgWithList [data-with]')];
+  bgWithUI(boxes.length ? new Set(boxes.filter(x=>x.checked).map(x=>x.dataset.with)) : null);
+}
+function bgWithSelected(){
+  return [...document.querySelectorAll('#bgWithList [data-with]:checked')].map(x=>({id:x.dataset.with, name:x.dataset.name}));
+}
+function bgWithCount(){
+  const n = bgWithSelected().length + 1;
+  const amt = parseFloat(document.getElementById('bgAmt').value);
+  const q = (!isNaN(amt) && amt>0) ? ' · quota '+eur(amt/n)+' a testa' : '';
+  document.getElementById('bgWithCount').textContent = 'Divisa tra '+n+' person'+(n===1?'a':'e')+' (te incluso)'+q;
+}
+document.getElementById('bgShared').addEventListener('change', ()=>bgWithUI(null));
+document.getElementById('bgWithList').addEventListener('change', bgWithCount);
+document.getElementById('bgAmt').addEventListener('input', ()=>{ if(document.getElementById('bgWithBox').style.display!=='none') bgWithCount(); });
 document.getElementById('bgAdd').addEventListener('click', ()=>{
   const amt = parseFloat(document.getElementById('bgAmt').value);
   if(isNaN(amt) || amt<=0) return;
@@ -1633,7 +1729,17 @@ document.getElementById('bgAdd').addEventListener('click', ()=>{
       e.cat = document.getElementById('bgCat').value;
       e.note = document.getElementById('bgNote').value.trim();
       e.shared = document.getElementById('bgShared').checked;
-      e.split = e.shared ? Math.max(1, Math.round(+document.getElementById('bgSplit').value)||1) : 1;
+      if(e.shared){
+        const remote = groupExpenses.find(x=>String(x.id)===String(e.id));   /* stato più fresco dei pagamenti */
+        const old = (remote && remote.sharedWith) || e.sharedWith || {};
+        const sw = {};
+        bgWithSelected().forEach(m=>{
+          const prev = old[m.id];
+          sw[m.id] = prev ? {name:m.name, paid:!!prev.paid, confirmed:!!prev.confirmed} : {name:m.name, paid:false, confirmed:false};
+        });
+        e.sharedWith = Object.keys(sw).length ? sw : null;
+      }else e.sharedWith = null;
+      delete e.split;
       if(fb.on){
         try{
           if(e.shared) R('spese/'+e.id).set(e);
@@ -1650,7 +1756,7 @@ document.getElementById('bgAdd').addEventListener('click', ()=>{
     document.getElementById('bgNote').value.trim(),
     document.getElementById('bgShared').checked,
     document.getElementById('bgDate').value,
-    document.getElementById('bgSplit').value);
+    bgWithSelected());
   if(ok) expResetForm();
 });
 document.getElementById('qAdd').addEventListener('click', ()=>{
@@ -1664,8 +1770,7 @@ function expResetForm(){
   editingExpId = null;
   document.getElementById('bgAmt').value=''; document.getElementById('bgNote').value='';
   document.getElementById('bgShared').checked=false;
-  delete document.getElementById('bgSplit').dataset.touched;
-  bgSplitUI();
+  bgWithUI(null);
   document.getElementById('bgDate').value = new Date().toISOString().slice(0,10);
   document.getElementById('bgAdd').textContent = '+ Registra spesa';
   document.getElementById('bgCancelEdit').style.display = 'none';
@@ -1683,9 +1788,7 @@ document.getElementById('bgList').addEventListener('click', async ev=>{
     document.getElementById('bgNote').value = e.note||'';
     document.getElementById('bgDate').value = e.date.slice(0,10);
     document.getElementById('bgShared').checked = !!e.shared;
-    document.getElementById('bgSplit').value = Math.max(1, e.split||1);
-    document.getElementById('bgSplit').dataset.touched = '1';
-    bgSplitUI();
+    bgWithUI(e.sharedWith ? new Set(Object.keys(e.sharedWith)) : null);
     document.getElementById('bgAdd').textContent = '💾 Salva modifiche';
     document.getElementById('bgCancelEdit').style.display = 'block';
     document.getElementById('bgAmt').scrollIntoView({behavior:'smooth', block:'center'});
