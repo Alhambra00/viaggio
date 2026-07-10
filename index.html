@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#16343A">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=2">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=3">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=3">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Compagno di Viaggio</title>
@@ -506,6 +506,8 @@ nav.tabs .ic{font-size:19px;line-height:1}
       <button class="btn btn-danger" id="fbOffBtn" style="flex:1">Disattiva</button>
     </div>
     <div class="small mt8" id="fbStatus">Non attiva — i dati restano solo su questo telefono.</div>
+    <div class="small mt8" style="font-weight:600">👥 Membri della stanza</div>
+    <div class="small mt8" id="fbMembers">Attiva la sincronizzazione per vedere i membri.</div>
   </div>
 
   <div class="eyebrow coll" data-coll="syncman">Condivisione manuale</div>
@@ -1224,19 +1226,39 @@ async function fbConnect(cfgText, room, silent){
     R('checklist').on('value', async s=>{ ckShared = Object.values(s.val()||{}); await store.set('ckShared',ckShared); renderCk(); });
     R('spese').on('value', async s=>{
       groupExpenses = Object.values(s.val()||{});
-      /* riporto gli stati pagato/confermato nella copia locale delle mie spese */
       let touched = false;
+      /* riporto gli stati pagato/confermato nella copia locale delle mie spese */
       groupExpenses.forEach(g=>{
         const l = expenses.find(x=>String(x.id)===String(g.id));
         if(l && JSON.stringify(l.sharedWith||null)!==JSON.stringify(g.sharedWith||null)){ l.sharedWith = g.sharedWith||null; touched = true; }
       });
-      if(touched) await store.set('expenses', expenses);
-      renderGroup();
+      /* quota automatica: le spese di gruppo pagate da altri in cui sono incluso entrano nel MIO budget con la mia parte */
+      const validQ = {};
+      groupExpenses.forEach(g=>{
+        if(!g.sharedWith || !g.sharedWith[deviceId] || isMineExp(g)) return;
+        const qid = 'q_'+g.id;
+        validQ[qid] = true;
+        const q = expShare(g);
+        const note = (g.note ? g.note+' · ' : '')+'pagata da '+(g.by||'?');
+        const l = expenses.find(x=>x.id===qid);
+        if(!l){
+          expenses.push({id:qid, fromGroup:String(g.id), amt:q, cat:g.cat, note, date:g.date, by:userName||'Io', byId:deviceId, shared:false});
+          touched = true;
+        }else if(l.amt!==q || l.cat!==g.cat || l.date!==g.date || l.note!==note){
+          l.amt=q; l.cat=g.cat; l.date=g.date; l.note=note; touched = true;
+        }
+      });
+      /* tolgo le quote di spese cancellate o da cui il pagatore mi ha rimosso */
+      for(let i=expenses.length-1; i>=0; i--){
+        if(expenses[i].fromGroup && !validQ[expenses[i].id]){ expenses.splice(i,1); touched = true; }
+      }
+      if(touched){ await store.set('expenses', expenses); renderBudget(); }
+      else renderGroup();
     });
     R('membri').on('value', s=>{
       const v = s.val()||{};
       members = Object.entries(v).map(([id,m])=>({id, name:(m&&m.name)||'?'}));
-      renderGroup(); bgWithRefresh();
+      renderGroup(); bgWithRefresh(); renderMembers();
     });
     fb.on = true;
     userName = document.getElementById('fbName').value.trim() || userName || 'Io';
@@ -1259,6 +1281,7 @@ document.getElementById('fbOffBtn').addEventListener('click', async ()=>{
   if(fb.on){ try{ ['events','pois','checklist','spese','membri'].forEach(c=>R(c).off()); }catch(e){} }
   fb.on = false;
   groupExpenses = []; members = [];
+  if(typeof renderMembers==='function') renderMembers();
   document.getElementById('bgSharedWrap').style.display = 'none';
   document.getElementById('ckAllWrap').style.display = 'none';
   document.getElementById('liveBadge').classList.remove('on');
@@ -1497,17 +1520,46 @@ function renderBudget(){
       const nSplit = expParts(e);
       const full = e.orig ? fmtCur(e.orig.amt, e.orig.cur)+' (≈ '+eur(e.amt)+')' : both(e.amt);
       const shown = nSplit>1 ? both(expShare(e)) : full;
-      const badge = e.shared ? ' <span class="badge">gruppo'+(nSplit>1?' ÷'+nSplit:'')+'</span>' : '';
+      const badge = e.fromGroup ? ' <span class="badge">quota gruppo</span>'
+        : (e.shared ? ' <span class="badge">gruppo'+(nSplit>1?' ÷'+nSplit:'')+'</span>' : '');
       const paidNote = nSplit>1 ? ' · pagati '+full+' per '+nSplit+' persone' : '';
+      const acts = e.fromGroup ? '<div class="acts" title="Gestita da chi ha pagato">🔒</div>'
+        : '<div class="acts"><button class="icon-btn" data-edit-bg="'+e.id+'" title="Modifica">✎</button>'+
+          '<button class="icon-btn del" data-del-bg="'+e.id+'" title="Elimina">✕</button></div>';
       return '<div class="item"><div><div class="t">'+shown+' · '+esc(e.cat)+badge+'</div>'+
       '<div class="s">'+new Date(e.date).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+(e.note?' · '+esc(e.note):'')+paidNote+'</div></div>'+
-      '<div class="acts"><button class="icon-btn" data-edit-bg="'+e.id+'" title="Modifica">✎</button>'+
-      '<button class="icon-btn del" data-del-bg="'+e.id+'" title="Elimina">✕</button></div></div>';
+      acts+'</div>';
     }).join('');
   }
   renderGroup();
 }
 let members=[];
+/* ---- elenco membri nelle impostazioni, con rimozione ---- */
+function renderMembers(){
+  const el = document.getElementById('fbMembers');
+  if(!el) return;
+  if(!fb.on){ el.innerHTML = 'Attiva la sincronizzazione per vedere i membri.'; return; }
+  if(!members.length){ el.innerHTML = 'Nessun membro registrato nella stanza.'; return; }
+  el.innerHTML = members.map(m=>
+    '<div class="row" style="margin-top:6px;gap:8px"><span style="flex:1">'+esc(m.name)+(m.id===deviceId?' <b>(questo dispositivo)</b>':'')+'</span>'+
+    '<button class="btn btn-danger" data-kick="'+esc(m.id)+'" data-kick-name="'+esc(m.name)+'" style="padding:4px 12px;font-size:12px;min-width:0">Rimuovi</button></div>'
+  ).join('');
+}
+document.getElementById('fbMembers').addEventListener('click', async ev=>{
+  const b = ev.target.closest('[data-kick]'); if(!b || !fb.on) return;
+  const id = b.dataset.kick, nm = b.dataset.kickName || '?';
+  const self = id===deviceId;
+  const msg = '⚠️ ATTENZIONE\n\nStai per rimuovere «'+nm+'»'+(self?' (QUESTO dispositivo)':'')+' dalla stanza.\n\n'+
+    '• Sparirà dall\u2019elenco membri e dalle prossime divisioni di spesa.\n'+
+    '• Le spese di gruppo e i debiti già registrati NON vengono cancellati.\n'+
+    (self ? '• Questo dispositivo si iscriverà di nuovo automaticamente alla prossima connessione.\n'
+          : '• Se quel dispositivo si ricollega alla stanza, comparirà di nuovo.\n')+
+    '\nVuoi procedere?';
+  if(!confirm(msg)) return;
+  try{
+    await R('membri/'+id).remove();
+  }catch(e){ alert('Rimozione non riuscita: '+((e&&e.message)||'riprova')); }
+});
 const gName = id => { const m = members.find(x=>x.id===id); return m ? m.name : null; };
 const isMineExp = e => (e.byId && e.byId===deviceId) || (!e.byId && e.by===userName && e.by!=='Io');
 const expLabel = e => esc(e.cat)+(e.note?' · '+esc(e.note):'')+' · '+new Date(e.date).toLocaleDateString('it-IT',{day:'numeric',month:'short'});
