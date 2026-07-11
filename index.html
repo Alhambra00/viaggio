@@ -277,9 +277,9 @@ nav.tabs .ic{font-size:23px;line-height:1}
 
   <div class="eyebrow">📥 Importa da Google Maps</div>
   <div class="card">
-<div class="small">Esporta i «Salvati» da Google Takeout (CSV/GeoJSON) o da My Maps (KML) e caricali qui.</div>
-    <button class="btn btn-primary mt8" id="impBtn" style="width:100%">📥 Carica file esportato</button>
-    <input type="file" id="impFile" accept=".csv,.json,.geojson,.kml,application/json,text/csv" style="display:none">
+<div class="small">Carica direttamente lo <b>ZIP di Google Takeout</b> (esporta solo «Salvati»): estraggo tutte le tue liste — ogni lista diventa la categoria dei suoi luoghi. Accetto anche singoli CSV/GeoJSON/KML.</div>
+    <button class="btn btn-primary mt8" id="impBtn" style="width:100%">📥 Carica Takeout (ZIP) o file</button>
+    <input type="file" id="impFile" accept=".zip,.csv,.json,.geojson,.kml,application/zip,application/json,text/csv" style="display:none">
     <div class="small mt8" id="impStatus"></div>
   </div>
 </section>
@@ -2142,36 +2142,66 @@ function parseMapsExport(text, fname){
   return items;
 }
 document.getElementById('impBtn').addEventListener('click', ()=>document.getElementById('impFile').click());
+async function impCollect(f){ // ritorna [{list, items}]
+  if(/\.zip$/i.test(f.name)){
+    impStatus('Apro lo ZIP di Takeout…');
+    if(!window.JSZip){
+      try{ await fbLoad('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'); }
+      catch(e){ impStatus('Impossibile caricare il lettore ZIP (offline?).'); return null; }
+    }
+    const zip = await JSZip.loadAsync(f);
+    const out = [];
+    const entries = Object.values(zip.files).filter(x=>!x.dir && /\.(csv|json|geojson)$/i.test(x.name)
+      && /saved|salvati|luoghi|maps/i.test(x.name));
+    for(const en of entries){
+      const listName = en.name.split('/').pop().replace(/\.(csv|json|geojson)$/i,'');
+      try{
+        const items = parseMapsExport(await en.async('string'), en.name);
+        if(items.length) out.push({list:listName, items});
+      }catch(e){}
+    }
+    return out;
+  }
+  const items = parseMapsExport(await f.text(), f.name);
+  return items.length ? [{list:'Da visitare', items}] : [];
+}
 document.getElementById('impFile').addEventListener('change', async ev=>{
   const f = ev.target.files[0]; ev.target.value='';
   if(!f) return;
-  let items=[];
-  try{ items = parseMapsExport(await f.text(), f.name); }
-  catch(e){ impStatus('File non riconosciuto: esporta in CSV, GeoJSON o KML e riprova.'); return; }
-  if(!items.length){ impStatus('Nessun luogo trovato nel file.'); return; }
+  let lists=null;
+  try{ lists = await impCollect(f); }
+  catch(e){ impStatus('File non riconosciuto: usa lo ZIP di Takeout oppure CSV/GeoJSON/KML.'); return; }
+  if(lists===null) return;
+  if(!lists.length){ impStatus('Nessuna lista di luoghi trovata nel file.'); return; }
   const existing = new Set(pois.map(p=>p.name.toLowerCase()));
-  items = items.filter(i=>!existing.has(i.name.toLowerCase()));
-  if(!items.length){ impStatus('Tutti i luoghi del file sono già nel tuo elenco.'); return; }
-  const direct = items.filter(i=>!i.geocode);
-  const toGeo = items.filter(i=>i.geocode).slice(0,25); // rispetto il limite del servizio gratuito
-  direct.forEach(i=>pois.push({id:uid(), name:i.name, cat:'Da visitare', lat:i.lat, lng:i.lng, visited:false}));
+  let direct=[], toGeo=[];
+  lists.forEach(L=>L.items.forEach(i=>{
+    if(existing.has(i.name.toLowerCase())) return;
+    existing.add(i.name.toLowerCase());
+    const it = {...i, cat:L.list};
+    (i.geocode ? toGeo : direct).push(it);
+  }));
+  if(!direct.length && !toGeo.length){ impStatus('Tutti i luoghi erano già nel tuo elenco.'); return; }
+  const geoBatch = toGeo.slice(0,25); // limite del servizio gratuito di ricerca
+  direct.forEach(i=>pois.push({id:uid(), name:i.name, cat:i.cat, lat:i.lat, lng:i.lng, visited:false}));
   if(direct.length) await savePois();
-  impStatus('Importati '+direct.length+' luoghi con coordinate.'+(toGeo.length?' Cerco le posizioni di altri '+toGeo.length+'…':''));
+  impStatus(lists.length+' liste trovate ('+lists.map(l=>l.list).join(', ')+'). Importati '+direct.length+' luoghi con coordinate.'+
+    (geoBatch.length?' Cerco le posizioni di altri '+geoBatch.length+'…':''));
   let found=0;
-  for(let i=0;i<toGeo.length;i++){
-    impStatus('Cerco posizioni: '+(i+1)+'/'+toGeo.length+' — «'+toGeo[i].name+'»');
+  for(let i=0;i<geoBatch.length;i++){
+    impStatus('Cerco posizioni: '+(i+1)+'/'+geoBatch.length+' — «'+geoBatch[i].name+'»');
     try{
-      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(toGeo[i].q));
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(geoBatch[i].q));
       const d = await r.json();
-      if(d[0]){ pois.push({id:uid(), name:toGeo[i].name, cat:'Da visitare', lat:+d[0].lat, lng:+d[0].lon, visited:false}); found++; }
+      if(d[0]){ pois.push({id:uid(), name:geoBatch[i].name, cat:geoBatch[i].cat, lat:+d[0].lat, lng:+d[0].lon, visited:false}); found++; }
     }catch(e){}
-    await new Promise(res=>setTimeout(res, 1100)); // max ~1 richiesta al secondo
+    await new Promise(res=>setTimeout(res, 1100));
   }
   if(found) await savePois();
-  const skipped = items.filter(i=>i.geocode).length - toGeo.length;
-  impStatus('Importazione completata: '+(direct.length+found)+' luoghi aggiunti.'+
-    (toGeo.length-found>0 ? ' '+(toGeo.length-found)+' non trovati.' : '')+
-    (skipped>0 ? ' '+skipped+' saltati (max 25 ricerche per volta: ricarica il file per continuare).' : ''));
+  const skipped = toGeo.length - geoBatch.length;
+  impStatus('Importazione completata: '+(direct.length+found)+' luoghi da '+lists.length+' liste.'+
+    (geoBatch.length-found>0 ? ' '+(geoBatch.length-found)+' non trovati.' : '')+
+    (skipped>0 ? ' '+skipped+' rimandati (max 25 ricerche per volta: ricarica lo ZIP per continuare).' : ''));
 });
 
 /* ---- drag & drop a pressione prolungata su cartelle e file ---- */
