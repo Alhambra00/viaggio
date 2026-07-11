@@ -57,8 +57,8 @@ main{max-width:640px;margin:0 auto;padding:14px 14px calc(140px + env(safe-area-
 .view.active{display:block;animation:fade .18s ease}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.view.active{animation:none}}
-.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
-  color:var(--ink-soft);margin:18px 2px 8px;display:flex;align-items:center;gap:8px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-soft);margin:20px 2px 9px;display:flex;align-items:center;gap:8px;font-weight:600}
 .eyebrow::after{content:"";flex:1;border-top:1px dashed var(--line)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:14px;box-shadow:0 1px 2px rgba(22,52,58,.05)}
@@ -66,7 +66,7 @@ button{font-family:inherit;cursor:pointer}
 input,select,textarea{font-family:inherit;font-size:15px;color:var(--ink);
   border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;width:100%}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
-.btn{border:none;border-radius:10px;padding:11px 14px;font-weight:600;font-size:14px}
+.btn{border:none;border-radius:10px;padding:12px 15px;font-weight:600;font-size:14px;min-height:44px}
 .btn-primary{background:var(--teal);color:#fff}
 .btn-ghost{background:var(--teal-soft);color:var(--teal)}
 .btn-danger{background:transparent;color:var(--pin);border:1px solid var(--pin)}
@@ -79,10 +79,10 @@ nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:600;background:#fff;
   border-top:1px solid var(--line);display:flex;justify-content:space-around;
   padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
 nav.tabs button{background:none;border:none;display:flex;flex-direction:column;align-items:center;
-  gap:2px;font-family:var(--mono);font-size:8.5px;letter-spacing:.04em;text-transform:uppercase;
-  color:var(--ink-soft);padding:4px 5px;border-radius:10px}
+  gap:3px;font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--ink-soft);padding:7px 8px;border-radius:12px;min-width:52px}
 nav.tabs button.active{color:var(--teal);background:var(--teal-soft)}
-nav.tabs .ic{font-size:19px;line-height:1}
+nav.tabs .ic{font-size:23px;line-height:1}
 
 /* ---- albero documenti ---- */
 .dnode{display:flex;align-items:center;gap:8px;padding:9px 4px;border-bottom:1px dashed var(--line);
@@ -146,8 +146,8 @@ nav.tabs .ic{font-size:19px;line-height:1}
 .item .t{font-weight:600}
 .item .s{font-size:12px;color:var(--ink-soft);font-family:var(--mono);margin-top:2px}
 .item .acts{display:flex;gap:6px;flex-shrink:0}
-.icon-btn{border:none;background:var(--teal-soft);color:var(--teal);border-radius:8px;
-  width:34px;height:34px;font-size:15px}
+.icon-btn{border:none;background:var(--teal-soft);color:var(--teal);border-radius:9px;
+  width:40px;height:40px;font-size:16px;flex-shrink:0}
 .icon-btn.del{background:#FBE9E4;color:var(--pin)}
 .done .t{text-decoration:line-through;color:var(--ink-soft)}
 .badge{font-family:var(--mono);font-size:10px;background:var(--teal-soft);color:var(--teal);
@@ -180,21 +180,23 @@ nav.tabs .ic{font-size:19px;line-height:1}
 <main>
 <!-- ================= HOME ================= -->
 <section class="view active" id="view-home">
-  <div class="eyebrow">Spesa rapida</div>
+  <div class="eyebrow">⚡ Spesa rapida</div>
   <div class="card">
     <div class="row">
       <input type="number" id="qAmt" inputmode="decimal" placeholder="Importo">
-      <button class="btn btn-ghost" id="qAmtCur" data-mode="eur" style="min-width:64px">EUR</button>
-      <select id="qCat" style="max-width:110px"></select>
-      <button class="btn btn-primary" id="qAdd" style="min-width:48px">+</button>
+      <button class="btn btn-ghost" id="qAmtCur" data-mode="eur" style="min-width:72px">EUR</button>
+    </div>
+    <div class="row mt8">
+      <select id="qCat" style="flex:1"></select>
+      <button class="btn btn-primary" id="qAdd" style="min-width:56px">+</button>
     </div>
     <div class="small mt8" id="qRemain"></div>
   </div>
 
-  <div class="eyebrow">Oggi</div>
+  <div class="eyebrow">📍 Oggi</div>
   <div class="card" id="todayCard"></div>
 
-  <div class="eyebrow">Convertitore valuta</div>
+  <div class="eyebrow">💱 Convertitore valuta</div>
   <div class="card">
     <input type="number" id="fxAmount" inputmode="decimal" placeholder="Importo" value="100">
     <div class="fx-grid mt8">
@@ -214,25 +216,25 @@ nav.tabs .ic{font-size:19px;line-height:1}
     </div>
   </div>
 
-  <div class="eyebrow" id="homeDebtsHead" style="display:none">Conti col gruppo</div>
+  <div class="eyebrow" id="homeDebtsHead" style="display:none">🤝 Conti col gruppo</div>
   <div class="card" id="homeDebts" style="display:none"></div>
 
-  <div class="eyebrow coll" data-coll="calc">Calcolatrice rapida</div>
+  <div class="eyebrow coll" data-coll="calc">🧮 Calcolatrice</div>
   <div class="card">
     <div class="calc-display"><span class="calc-expr" id="calcExpr">&nbsp;</span><span id="calcOut">0</span></div>
     <div class="calc-grid" id="calcGrid"></div>
   </div>
 
-  <div class="eyebrow">Prossime partenze</div>
+  <div class="eyebrow">✈️ Prossime partenze</div>
   <div id="homeCountdowns"></div>
 </section>
 
 <!-- ================= EVENTI ================= -->
 <section class="view" id="view-eventi">
-  <div class="eyebrow">Countdown · 3 più vicini</div>
+  <div class="eyebrow">⏳ Countdown · 3 più vicini</div>
   <div id="countdowns"></div>
 
-  <div class="eyebrow">Nuovo evento</div>
+  <div class="eyebrow">➕ Nuovo evento</div>
   <div class="card">
     <input id="evName" placeholder="Nome evento (es. Volo per Lisbona)">
     <input class="mt8" id="evDate" type="datetime-local">
@@ -242,20 +244,20 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <button class="btn btn-ghost mt8" id="evCancelEdit" style="width:100%;display:none">Annulla modifica</button>
   </div>
 
-  <div class="eyebrow coll" data-coll="evlist">Tutti gli eventi</div>
+  <div class="eyebrow coll" data-coll="evlist">🗂 Tutti gli eventi</div>
   <div class="card" id="evList"></div>
 </section>
 
 <!-- ================= MAPPA ================= -->
 <section class="view" id="view-mappa">
-  <div class="eyebrow">Punti di interesse</div>
+  <div class="eyebrow">🔍 Cerca e aggiungi luoghi</div>
   <div class="row" style="margin-bottom:8px">
     <input id="mapSearch" placeholder="Cerca luogo o indirizzo (es. Via Roma 12, Torino)" enterkeyhint="search" autocomplete="off">
     <button class="btn btn-primary" id="mapSearchBtn" style="min-width:52px">🔍</button>
   </div>
   <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
   <div id="map"></div>
-  <div class="map-hint">Scrivi almeno 3 lettere per i suggerimenti automatici. Toccando la mappa, l'app riconosce il luogo o l'indirizzo sotto il dito. 📍 = da visitare, ✅ = visitato.</div>
+  <div class="map-hint">Cerca, oppure tocca la mappa: riconosco il luogo. 📍 da visitare · ✅ visitato</div>
 
   <div class="card mt12" id="poiFormCard" style="display:none">
     <div class="small" id="poiCoords"></div>
@@ -270,12 +272,12 @@ nav.tabs .ic{font-size:19px;line-height:1}
     </div>
   </div>
 
-  <div class="eyebrow coll" data-coll="poilist">Elenco salvati</div>
+  <div class="eyebrow coll" data-coll="poilist">📌 Luoghi salvati</div>
   <div class="card" id="poiList"></div>
 
-  <div class="eyebrow">Importa da Google Maps</div>
+  <div class="eyebrow">📥 Importa da Google Maps</div>
   <div class="card">
-    <div class="small">Porta qui i tuoi luoghi salvati su Maps: da <b>Google Takeout</b> esporta «Salvati» (file CSV o GeoJSON), oppure da <b>My Maps</b> esporta in KML. Carica il file e i luoghi diventeranno punti spuntabili dell'elenco, sincronizzati col gruppo se la sync è attiva.</div>
+<div class="small">Esporta i «Salvati» da Google Takeout (CSV/GeoJSON) o da My Maps (KML) e caricali qui.</div>
     <button class="btn btn-primary mt8" id="impBtn" style="width:100%">📥 Carica file esportato</button>
     <input type="file" id="impFile" accept=".csv,.json,.geojson,.kml,application/json,text/csv" style="display:none">
     <div class="small mt8" id="impStatus"></div>
@@ -284,7 +286,7 @@ nav.tabs .ic{font-size:19px;line-height:1}
 
 <!-- ================= BUDGET ================= -->
 <section class="view" id="view-budget">
-  <div class="eyebrow coll" data-coll="bgmain">Il mio budget · personale</div>
+  <div class="eyebrow coll" data-coll="bgmain">💰 Il mio budget</div>
   <div class="card">
     <div class="row">
       <input type="number" id="bgTotal" inputmode="decimal" placeholder="Budget totale €">
@@ -293,12 +295,12 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <div class="row mt8">
       <select id="bgCur" style="flex:1"></select>
     </div>
-    <div class="small mt8">Valuta del viaggio: tutti gli importi verranno mostrati in € e in questa valuta.</div>
+    <div class="small mt8">Valuta del viaggio: importi sempre in € + questa.</div>
     <div class="row mt8">
       <input type="date" id="bgStart" title="Inizio viaggio">
       <input type="date" id="bgEnd" title="Fine viaggio">
     </div>
-    <div class="small mt8">Date del viaggio (dal — al): servono per calcolare il budget giornaliero.</div>
+    <div class="small mt8">Date del viaggio (per il budget giornaliero).</div>
     <div class="row mt8">
       <input id="bgDest" placeholder="Città di destinazione (per il meteo in Home)">
       <button class="btn btn-primary" id="bgDestSet" style="min-width:56px">OK</button>
@@ -311,25 +313,25 @@ nav.tabs .ic{font-size:19px;line-height:1}
     </div>
   </div>
 
-  <div class="eyebrow">Budget giornaliero · adattivo</div>
+  <div class="eyebrow">📆 Budget di oggi</div>
   <div class="card" id="bgDaily"></div>
 
-  <div class="eyebrow">Andamento spese</div>
+  <div class="eyebrow">📈 Andamento spese</div>
   <div class="card" id="bgChart"></div>
 
-  <div class="eyebrow">Nuova spesa</div>
+  <div class="eyebrow">🧾 Nuova spesa</div>
   <div class="card">
     <div class="row">
       <input type="number" id="bgAmt" inputmode="decimal" placeholder="Importo">
-      <button class="btn btn-ghost" id="bgAmtCur" data-mode="eur" style="min-width:64px">EUR</button>
-      <select id="bgCat" style="max-width:120px"></select>
+      <button class="btn btn-ghost" id="bgAmtCur" data-mode="eur" style="min-width:72px">EUR</button>
     </div>
+    <select class="mt8" id="bgCat"></select>
     <input class="mt8" id="bgNote" placeholder="Nota (facoltativa)">
     <div class="row mt8">
       <input type="date" id="bgDate" style="flex:1" title="Data della spesa">
       <button class="btn btn-ghost" id="bgDateToday" style="min-width:70px">Oggi</button>
     </div>
-    <div class="small mt8">Data della spesa: di default oggi, ma puoi registrarla con data diversa.</div>
+    
     <label class="row mt8" id="bgSharedWrap" style="display:none;font-size:13px;color:var(--ink-soft)">
       <input type="checkbox" id="bgShared" style="width:18px;height:18px;accent-color:var(--teal)"> Condividi col gruppo di viaggio
     </label>
@@ -343,7 +345,7 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <button class="btn btn-ghost mt8" id="bgCancelEdit" style="width:100%;display:none">Annulla modifica</button>
   </div>
 
-  <div class="eyebrow coll" data-coll="bglist">Le mie spese</div>
+  <div class="eyebrow coll" data-coll="bglist">👛 Le mie spese</div>
   <div class="card">
     <div class="row" style="margin-bottom:8px">
       <input type="date" id="bgFilter" style="flex:1" title="Filtra per giorno">
@@ -354,13 +356,13 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <div id="bgList"></div>
   </div>
 
-  <div class="eyebrow coll" data-coll="bggroup">Spese di gruppo</div>
+  <div class="eyebrow coll" data-coll="bggroup">👥 Spese di gruppo</div>
   <div class="card" id="bgGroup"><div class="empty">Attiva la Sincronizzazione live (⚙️ in alto a destra) per vedere le spese condivise da chi ha lo stesso codice viaggio.</div></div>
 </section>
 
 <!-- ================= DOCUMENTI ================= -->
 <section class="view" id="view-docs">
-  <div class="eyebrow">Documenti di viaggio · solo su questo dispositivo</div>
+  <div class="eyebrow">📂 Documenti · solo su questo telefono</div>
   <div class="card">
     <div class="row">
       <button class="btn btn-primary" id="docUploadBtn" style="flex:1">📤 Carica file</button>
@@ -378,11 +380,11 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <input type="file" id="docImportFile" accept=".json,application/json" style="display:none">
     <div class="small mt8" id="docXferStatus"></div>
     <div class="small mt8" id="docTarget"></div>
-    <div class="small mt8">Tocca una cartella per selezionarla (caricamenti e nuove cartelle finiranno lì dentro) e per aprirla/chiuderla. Tocca un file per visualizzarlo.</div>
+    
     <div class="small mt8" id="docQuota"></div>
   </div>
 
-  <div class="eyebrow">Archivio</div>
+  <div class="eyebrow">🗄 Archivio</div>
   <div class="card">
     <div class="row" style="margin-bottom:6px">
       <button class="btn btn-ghost" id="docExpandAll" style="flex:1">▾ Espandi tutto</button>
@@ -403,7 +405,25 @@ nav.tabs .ic{font-size:19px;line-height:1}
 
 <!-- ================= STRUMENTI ================= -->
 <section class="view" id="view-strumenti">
-  <div class="eyebrow coll" data-coll="units">Convertitore unità</div>
+
+  <div class="eyebrow coll" data-coll="cklist">🎒 Checklist bagaglio</div>
+  <div class="card">
+    <div class="row">
+      <input id="ckInput" placeholder="Aggiungi un oggetto…">
+      <button class="btn btn-primary" id="ckAdd">+</button>
+    </div>
+    <label class="row mt8" id="ckAllWrap" style="display:none;font-size:13px;color:var(--ink-soft)">
+      <input type="checkbox" id="ckAll" checked style="width:18px;height:18px;accent-color:var(--teal)"> Aggiungi per tutto il gruppo
+    </label>
+    <div class="row mt8">
+      <button class="btn btn-ghost" id="ckPreset" style="flex:1">Carica lista base</button>
+      <button class="btn btn-danger" id="ckReset" style="flex:1">Deseleziona tutto</button>
+    </div>
+    <div class="small mt8">Spunte personali · ✕ toglie solo dalla tua lista · 🗑 elimina per tutti (solo autore)</div>
+    <div class="mt8" id="ckList"></div>
+  </div>
+
+  <div class="eyebrow coll" data-coll="units">📏 Convertitore unità</div>
   <div class="card">
     <select id="unitType">
       <option value="dist">Distanza · km ⇄ miglia</option>
@@ -418,7 +438,7 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <div class="result-big" id="unitOut">—</div>
   </div>
 
-  <div class="eyebrow coll" data-coll="tip">Mancia &amp; dividi il conto</div>
+  <div class="eyebrow coll" data-coll="tip">🍽 Mancia &amp; dividi il conto</div>
   <div class="card">
     <div class="row" style="align-items:flex-end">
       <div style="flex:1"><div class="small" style="margin-bottom:4px">Totale conto</div><input type="number" id="tipTotal" inputmode="decimal" placeholder="0"></div>
@@ -429,24 +449,7 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <div class="small" id="tipDetail"></div>
   </div>
 
-  <div class="eyebrow coll" data-coll="cklist">Checklist bagaglio · personale, con voci di gruppo</div>
-  <div class="card">
-    <div class="row">
-      <input id="ckInput" placeholder="Aggiungi un oggetto…">
-      <button class="btn btn-primary" id="ckAdd">+</button>
-    </div>
-    <label class="row mt8" id="ckAllWrap" style="display:none;font-size:13px;color:var(--ink-soft)">
-      <input type="checkbox" id="ckAll" checked style="width:18px;height:18px;accent-color:var(--teal)"> Aggiungi per tutto il gruppo
-    </label>
-    <div class="row mt8">
-      <button class="btn btn-ghost" id="ckPreset" style="flex:1">Carica lista base</button>
-      <button class="btn btn-danger" id="ckReset" style="flex:1">Deseleziona tutto</button>
-    </div>
-    <div class="small mt8">Le spunte sono solo tue: ognuno segna quello che ha messo in valigia. ✕ toglie una voce solo dalla tua lista; chi l'ha creata può anche eliminarla per tutti (🗑).</div>
-    <div class="mt8" id="ckList"></div>
-  </div>
-
-  <div class="eyebrow">Note di viaggio</div>
+  <div class="eyebrow">📝 Note di viaggio</div>
   <div class="card">
     <textarea id="notes" rows="5" placeholder="Indirizzi, codici prenotazione, promemoria… (salvataggio automatico)"></textarea>
     <div class="small mt8" id="notesStatus"></div>
@@ -455,7 +458,7 @@ nav.tabs .ic{font-size:19px;line-height:1}
 
 <!-- ================= IMPOSTAZIONI ================= -->
 <section class="view" id="view-impostazioni">
-  <div class="eyebrow">I miei viaggi</div>
+  <div class="eyebrow">🧳 I miei viaggi</div>
   <div class="card">
     <div class="row">
       <input id="tripName" placeholder="Nome del viaggio corrente">
@@ -469,10 +472,10 @@ nav.tabs .ic{font-size:19px;line-height:1}
       <button class="btn btn-ghost" id="tripNew" style="flex:1">➕ Nuovo viaggio</button>
       <button class="btn btn-danger" id="tripDel" style="flex:1">Elimina selezionato</button>
     </div>
-    <div class="small mt8" id="tripInfo">Ogni viaggio ha eventi, budget, mappa, checklist, note e stanza di sincronizzazione propri. I Documenti (Docs) sono comuni a tutti i viaggi.</div>
+    <div class="small mt8" id="tripInfo">Ogni viaggio è separato; i Documenti sono comuni.</div>
   </div>
 
-  <div class="eyebrow">Aspetto</div>
+  <div class="eyebrow">🎨 Aspetto</div>
   <div class="card">
     <select id="themeSel">
       <option value="auto">Tema automatico (segue il telefono)</option>
@@ -481,9 +484,9 @@ nav.tabs .ic{font-size:19px;line-height:1}
     </select>
   </div>
 
-  <div class="eyebrow coll" data-coll="backup">Backup completo</div>
+  <div class="eyebrow coll" data-coll="backup">💾 Backup completo</div>
   <div class="card">
-    <div class="small">Salva in un unico file <b>tutti</b> i viaggi (eventi, spese, budget, mappe, checklist, note) e opzionalmente i documenti. Il ripristino sostituisce i dati sul dispositivo.</div>
+    <div class="small">Un file con tutti i viaggi. Il ripristino sostituisce i dati.</div>
     <label class="row mt8" style="font-size:13px;color:var(--ink-soft)">
       <input type="checkbox" id="bkDocs" style="width:18px;height:18px;accent-color:var(--teal)"> Includi documenti (file più pesante)
     </label>
@@ -495,9 +498,9 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <div class="small mt8" id="bkStatus"></div>
   </div>
 
-  <div class="eyebrow coll" data-coll="synclive">Sincronizzazione live</div>
+  <div class="eyebrow coll" data-coll="synclive">🔄 Sincronizzazione live</div>
   <div class="card">
-    <div class="small">Collega un database Firebase gratuito: eventi, checklist e punti mappa si aggiornano <b>in tempo reale</b> su tutti i telefoni che usano la stessa configurazione e lo stesso codice stanza.</div>
+    <div class="small">Stessa configurazione + stesso codice stanza = dati in tempo reale per tutti.</div>
     <textarea id="fbCfg" rows="4" class="mt8" placeholder="Incolla qui la configurazione Firebase (il blocco firebaseConfig = { ... })"></textarea>
     <input id="fbRoom" class="mt8" placeholder="Codice stanza condiviso (es. viaggio-lisbona-2026)">
     <input id="fbName" class="mt8" placeholder="Il tuo nome (per spese di gruppo e checklist)">
@@ -510,9 +513,9 @@ nav.tabs .ic{font-size:19px;line-height:1}
     <div class="small mt8" id="fbMembers">Attiva la sincronizzazione per vedere i membri.</div>
   </div>
 
-  <div class="eyebrow coll" data-coll="syncman">Condivisione manuale</div>
+  <div class="eyebrow coll" data-coll="syncman">📤 Condivisione manuale</div>
   <div class="card">
-    <div class="small">Alternativa senza database: invia eventi, checklist e punti mappa via messaggio. Chi riceve tocca «Importa» e incolla: i dati si uniscono ai suoi senza duplicati.</div>
+    <div class="small">Senza database: invia i dati via messaggio, chi riceve li importa senza duplicati.</div>
     <div class="row mt8">
       <button class="btn btn-primary" id="syncExport" style="flex:1">📤 Esporta / condividi</button>
       <button class="btn btn-ghost" id="syncImportBtn" style="flex:1">📥 Importa</button>
@@ -532,12 +535,12 @@ nav.tabs .ic{font-size:19px;line-height:1}
 </div>
 
 <nav class="tabs">
-  <button data-view="home" class="active"><span class="ic">🧮</span>Home</button>
+  <button data-view="home" class="active"><span class="ic">🏠</span>Home</button>
   <button data-view="eventi"><span class="ic">🗓️</span>Eventi</button>
   <button data-view="budget"><span class="ic">💶</span>Budget</button>
   <button data-view="mappa"><span class="ic">🗺️</span>Mappa</button>
   <button data-view="docs"><span class="ic">📁</span>Docs</button>
-  <button data-view="strumenti"><span class="ic">🎒</span>Extra</button>
+  <button data-view="strumenti"><span class="ic">🧰</span>Extra</button>
 </nav>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
