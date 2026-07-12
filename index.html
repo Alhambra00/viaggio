@@ -175,7 +175,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v15</span>
+  <span class="route" style="opacity:.7">v16</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -531,7 +531,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v15</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v16</div>
 </section>
 </main>
 
@@ -843,7 +843,9 @@ window.poiShowInList = id => {                    // dal pin alla riga in elenco
   if(row){ row.scrollIntoView({behavior:'smooth', block:'center'}); row.classList.add('flash'); setTimeout(()=>row.classList.remove('flash'), 1600); }
 };
 function poiGoToMap(id){                          // dalla riga al pin sulla mappa
-  const p = pois.find(x=>String(x.id)===String(id)); if(!p || !map) return;
+  const p = pois.find(x=>String(x.id)===String(id)); if(!p) return;
+  if(!Number.isFinite(p.lat)){ if(p.url) window.open(p.url, '_blank'); return; }   // senza pin: apro Google
+  if(!map) return;
   document.getElementById('map').scrollIntoView({behavior:'smooth', block:'center'});
   map.setView([p.lat, p.lng], 16);
   if(markers[p.id]) markers[p.id].openPopup();
@@ -867,9 +869,9 @@ function renderPois(){
       if(open) html += arr.sort((a,b)=>a.name.localeCompare(b.name)).map(p=>
         '<div class="item'+(p.visited?' done':'')+'" data-poi-row="'+p.id+'" style="margin-left:14px">'+
         '<div class="dn" data-goto="'+p.id+'" style="cursor:pointer;flex:1;min-width:0"><div class="t">'+esc(p.name)+'</div>'+
-        '<div class="s">tocca per vedere sulla mappa</div></div>'+
+        '<div class="s">'+(Number.isFinite(p.lat)?'tocca per vedere sulla mappa':'senza pin · 🧭 apre Google · ✎ per posizionarlo')+'</div></div>'+
         '<div class="acts">'+
-        '<a class="icon-btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'" title="Apri in Google Maps">🧭</a>'+
+        '<a class="icon-btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" target="_blank" rel="noopener" href="'+(p.url?esc(p.url):'https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng)+'" title="Apri in Google Maps">🧭</a>'+
         '<button class="icon-btn" data-edit-poi="'+p.id+'" title="Modifica">✎</button>'+
         '<button class="icon-btn" data-vis="'+p.id+'" title="Visitato / da visitare">'+(p.visited?'↩':'✓')+'</button>'+
         '<button class="icon-btn del" data-del-poi="'+p.id+'" title="Elimina">✕</button></div></div>'
@@ -896,13 +898,15 @@ function renderPois(){
     list.querySelectorAll('[data-edit-poi]').forEach(b=>b.addEventListener('click',()=>{
       const p=pois.find(x=>x.id===b.dataset.editPoi); if(!p) return;
       poiEditingId = p.id;
-      pendingLatLng = {lat:p.lat, lng:p.lng};
+      pendingLatLng = Number.isFinite(p.lat) ? {lat:p.lat, lng:p.lng} : null;
       document.getElementById('poiName').value = p.name;
       document.getElementById('poiCat').value = p.cat;
-      document.getElementById('poiCoords').textContent = 'Modifica punto: '+p.lat.toFixed(5)+', '+p.lng.toFixed(5);
+      document.getElementById('poiCoords').textContent = Number.isFinite(p.lat)
+        ? 'Modifica punto: '+p.lat.toFixed(5)+', '+p.lng.toFixed(5)+' (tocca la mappa per spostarlo)'
+        : 'Senza posizione: tocca la mappa nel punto giusto, poi Salva.';
       document.getElementById('poiFormCard').style.display = 'block';
-      if(map) map.setView([p.lat,p.lng], 15);
-      document.getElementById('poiName').focus();
+      document.getElementById('poiFormCard').scrollIntoView({behavior:'smooth', block:'center'});
+      if(map && Number.isFinite(p.lat)) map.setView([p.lat,p.lng], 15);
     }));
     list.querySelectorAll('[data-del-poi]').forEach(b=>b.addEventListener('click',async()=>{
       const removed = pois.find(x=>x.id===b.dataset.delPoi);
@@ -913,7 +917,7 @@ function renderPois(){
   }
   if(map){
     Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
-    pois.forEach(p=>{
+    pois.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).forEach(p=>{
       markers[p.id] = L.marker([p.lat,p.lng],{icon:poiIcon(p)}).addTo(map)
         .bindPopup('<div style="min-width:170px"><b>'+esc(p.name)+'</b><br><span style="font-size:11px;color:#4A6468">'+esc(p.cat||'')+'</span><br>'+
           '<div style="display:flex;gap:6px;margin-top:8px">'+
@@ -927,10 +931,14 @@ async function savePois(){ await store.set('pois', pois); fbPush('pois', pois); 
 let poiEditingId = null;
 document.getElementById('poiSave').addEventListener('click', async ()=>{
   const name = document.getElementById('poiName').value.trim();
-  if(!name || !pendingLatLng) return;
+  if(!name) return;
+  if(!poiEditingId && !pendingLatLng) return;
   if(poiEditingId){
     const p = pois.find(x=>x.id===poiEditingId);
-    if(p){ p.name = name; p.cat = document.getElementById('poiCat').value; }
+    if(p){
+      p.name = name; p.cat = document.getElementById('poiCat').value;
+      if(pendingLatLng && Number.isFinite(pendingLatLng.lat)){ p.lat = pendingLatLng.lat; p.lng = pendingLatLng.lng; }
+    }
     poiEditingId = null;
   }else{
     pois.push({id:uid(), name, cat:document.getElementById('poiCat').value,
@@ -2165,8 +2173,8 @@ function csvParseLine(l){
 }
 function parseMapsExport(text, fname){
   const items=[];
-  const push=(name,lat,lng)=>{ if(name&&isFinite(lat)&&isFinite(lng)) items.push({name:String(name).trim(),lat:+lat,lng:+lng}); };
-  const pushGeo=(name,q)=>{ if(name) items.push({name:String(name).trim(), geocode:true, q:q||name}); };
+  const push=(name,lat,lng,url)=>{ if(name&&isFinite(lat)&&isFinite(lng)) items.push({name:String(name).trim(),lat:+lat,lng:+lng,url:url||null}); };
+  const pushGeo=(name,q,url)=>{ if(name) items.push({name:String(name).trim(), geocode:true, q:q||name, url:url||null}); };
   if(/\.kml$/i.test(fname) || text.includes('<kml')){
     const doc = new DOMParser().parseFromString(text,'text/xml');
     doc.querySelectorAll('Placemark').forEach(pm=>{
@@ -2198,7 +2206,7 @@ function parseMapsExport(text, fname){
       const url = ui>=0 ? (c[ui]||'') : '';
       if(!/google\.[a-z.]+\/maps/i.test(url)) return;   // non è un luogo (immagini, link web…)
       const m = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/) || url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-      if(m) push(name, +m[1], +m[2]); else pushGeo(name);
+      if(m) push(name, +m[1], +m[2], url); else pushGeo(name, null, url);
     });
   }
   return items;
@@ -2292,9 +2300,9 @@ async function impRun(lists){
     (i.geocode ? toGeo : direct).push(it);
   }));
   if(!direct.length && !toGeo.length){ impStatus('Tutti i luoghi erano già nel tuo elenco.'); return; }
-  direct.forEach(i=>pois.push({id:uid(), name:i.name, cat:i.cat, lat:i.lat, lng:i.lng, visited:false}));
+  direct.forEach(i=>pois.push({id:uid(), name:i.name, cat:i.cat, lat:i.lat, lng:i.lng, url:i.url||null, visited:false}));
   if(direct.length) await savePois();
-  impGeoQueue = impGeoQueue.concat(toGeo.map(i=>({name:i.name, cat:i.cat})));
+  impGeoQueue = impGeoQueue.concat(toGeo.map(i=>({name:i.name, cat:i.cat, url:i.url||null})));
   await impSaveQueue();
   impStatus('Importati '+direct.length+' luoghi con coordinate precise.'+(impGeoQueue.length?' '+impGeoQueue.length+' senza coordinate: cerco le posizioni…':''));
   if(impGeoQueue.length) impGeoBatch();
@@ -2371,8 +2379,8 @@ async function impGeoBatch(){
     impStatus('Cerco posizioni: '+(i+1)+'/'+n+' — «'+item.name+'»');
     const hit = await geoResolve(item);
     if(hit===null){ offline=true; break; }                                   // niente rete: riprendi dopo
-    if(hit){ pois.push({id:uid(), name:item.name, cat:item.cat, lat:hit.lat, lng:hit.lng, visited:false}); found++; }
-    else miss++;
+    if(hit){ pois.push({id:uid(), name:item.name, cat:item.cat, lat:hit.lat, lng:hit.lng, url:item.url||null, visited:false}); found++; }
+    else{ pois.push({id:uid(), name:item.name, cat:item.cat, lat:null, lng:null, url:item.url||null, visited:false}); miss++; }
     impGeoQueue.shift();
     await impSaveQueue();
     await new Promise(res=>setTimeout(res, 350));
@@ -2381,7 +2389,7 @@ async function impGeoBatch(){
   impGeoRunning = false;
   impStatus(offline
     ? 'Connessione assente: trovati '+found+' finora, riprendi con «Continua».'
-    : 'Fatto: '+found+' posizioni trovate'+(miss?', '+miss+' non trovate (correggile con ✎ + tocco sulla mappa)':'')+'.'+
+    : 'Fatto: '+found+' con pin sulla mappa'+(miss?', '+miss+' importati senza pin (il 🧭 apre comunque il posto esatto su Google; per il pin: ✎ + tocco sulla mappa)':'')+'.'+
       (impGeoQueue.length ? ' Restano '+impGeoQueue.length+' luoghi.' : ' Coda completata ✓'));
   impRenderQueue();
 }
