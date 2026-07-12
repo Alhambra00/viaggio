@@ -96,6 +96,8 @@ nav.tabs .ic{font-size:23px;line-height:1}
 .dnode{user-select:none;-webkit-user-select:none}
 .dnode.dragsrc{opacity:.35}
 .dnode.droptgt{outline:2px solid var(--teal);background:var(--teal-soft)}
+.item.flash{animation:flashbg 1.6s ease}
+@keyframes flashbg{0%,60%{background:var(--teal-soft)}100%{background:transparent}}
 #dragGhost{position:fixed;z-index:950;pointer-events:none;opacity:.9;background:#fff;
   border:1px solid var(--teal);border-radius:10px;padding:8px 12px;font-weight:600;font-size:14px;
   box-shadow:0 6px 18px rgba(22,52,58,.25);max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -173,6 +175,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
+  <span class="route" style="opacity:.7">v13</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -281,6 +284,8 @@ nav.tabs .ic{font-size:23px;line-height:1}
     <button class="btn btn-primary mt8" id="impBtn" style="width:100%">📥 Carica Takeout (ZIP) o file</button>
     <input type="file" id="impFile" accept=".zip,.csv,.json,.geojson,.kml,application/zip,application/json,text/csv" style="display:none">
     <div class="small mt8" id="impStatus"></div>
+    <div id="impPick" class="mt8" style="display:none"></div>
+    <div id="impQueueBox"></div>
   </div>
 </section>
 
@@ -526,6 +531,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v13</div>
 </section>
 </main>
 
@@ -799,6 +805,7 @@ function initMap(){
       document.getElementById('poiCoords').textContent =
         'Posizione: '+e.latlng.lat.toFixed(5)+', '+e.latlng.lng.toFixed(5);
       document.getElementById('poiFormCard').style.display='block';
+      document.getElementById('poiFormCard').scrollIntoView({behavior:'smooth', block:'center'});
       // riconosco cosa c'è nel punto toccato (luogo noto o indirizzo)
       fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=it&lat='+e.latlng.lat+'&lon='+e.latlng.lng)
         .then(r=>r.json()).then(d=>{
@@ -823,19 +830,57 @@ function initMap(){
 function poiIcon(p){
   return L.divIcon({className:'', html:'<div style="font-size:26px;line-height:1">'+(p.visited?'✅':'📍')+'</div>', iconSize:[26,26], iconAnchor:[13,26]});
 }
+let poiOpenGroups = new Set();
+window.poiToggleVisited = async id => {           // usato dai popup sulla mappa
+  const p = pois.find(x=>String(x.id)===String(id)); if(!p) return;
+  p.visited = !p.visited; await savePois();
+};
+window.poiShowInList = id => {                    // dal pin alla riga in elenco
+  const p = pois.find(x=>String(x.id)===String(id)); if(!p) return;
+  poiOpenGroups.add(p.cat||'Da visitare');
+  renderPois();
+  const row = document.querySelector('[data-poi-row="'+p.id+'"]');
+  if(row){ row.scrollIntoView({behavior:'smooth', block:'center'}); row.classList.add('flash'); setTimeout(()=>row.classList.remove('flash'), 1600); }
+};
+function poiGoToMap(id){                          // dalla riga al pin sulla mappa
+  const p = pois.find(x=>String(x.id)===String(id)); if(!p || !map) return;
+  document.getElementById('map').scrollIntoView({behavior:'smooth', block:'center'});
+  map.setView([p.lat, p.lng], 16);
+  if(markers[p.id]) markers[p.id].openPopup();
+}
 function renderPois(){
   const list = document.getElementById('poiList');
   if(!pois.length){ list.innerHTML='<div class="empty">Nessun punto salvato. Tocca la mappa per iniziare.</div>'; }
   else{
-    list.innerHTML = pois.map(p=>
-      '<div class="item'+(p.visited?' done':'')+'"><div><div class="t">'+esc(p.name)+' <span class="badge">'+esc(p.cat)+'</span></div>'+
-      '<div class="s">'+p.lat.toFixed(4)+', '+p.lng.toFixed(4)+'</div></div>'+
-      '<div class="acts">'+
-      '<a class="icon-btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'" title="Apri in Google Maps">🧭</a>'+
-      '<button class="icon-btn" data-edit-poi="'+p.id+'" title="Modifica">✎</button>'+
-      '<button class="icon-btn" data-vis="'+p.id+'" title="Visitato / da visitare">'+(p.visited?'↩':'✓')+'</button>'+
-      '<button class="icon-btn del" data-del-poi="'+p.id+'" title="Elimina">✕</button></div></div>'
-    ).join('');
+    const groups = {};
+    pois.forEach(p=>{ const g = p.cat||'Da visitare'; (groups[g]=groups[g]||[]).push(p); });
+    const gnames = Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+    if(gnames.length===1) poiOpenGroups.add(gnames[0]);   // un solo elenco: aperto
+    list.innerHTML = gnames.map(g=>{
+      const arr = groups[g];
+      const open = poiOpenGroups.has(g);
+      const done = arr.filter(p=>p.visited).length;
+      let html = '<div class="dnode" data-poi-group="'+esc(g)+'" style="cursor:pointer">'+
+        '<span class="arrow">'+(open?'▾':'▸')+'</span>'+
+        '<div class="dn"><div class="t">📌 '+esc(g)+'</div><div class="s">'+arr.length+' luoghi · '+done+' visitati</div></div></div>';
+      if(open) html += arr.sort((a,b)=>a.name.localeCompare(b.name)).map(p=>
+        '<div class="item'+(p.visited?' done':'')+'" data-poi-row="'+p.id+'" style="margin-left:14px">'+
+        '<div class="dn" data-goto="'+p.id+'" style="cursor:pointer;flex:1;min-width:0"><div class="t">'+esc(p.name)+'</div>'+
+        '<div class="s">tocca per vedere sulla mappa</div></div>'+
+        '<div class="acts">'+
+        '<a class="icon-btn" style="display:flex;align-items:center;justify-content:center;text-decoration:none" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+p.lat+','+p.lng+'" title="Apri in Google Maps">🧭</a>'+
+        '<button class="icon-btn" data-edit-poi="'+p.id+'" title="Modifica">✎</button>'+
+        '<button class="icon-btn" data-vis="'+p.id+'" title="Visitato / da visitare">'+(p.visited?'↩':'✓')+'</button>'+
+        '<button class="icon-btn del" data-del-poi="'+p.id+'" title="Elimina">✕</button></div></div>'
+      ).join('');
+      return html;
+    }).join('');
+    list.querySelectorAll('[data-poi-group]').forEach(el=>el.addEventListener('click',()=>{
+      const g = el.dataset.poiGroup;
+      poiOpenGroups.has(g) ? poiOpenGroups.delete(g) : poiOpenGroups.add(g);
+      renderPois();
+    }));
+    list.querySelectorAll('[data-goto]').forEach(el=>el.addEventListener('click',()=>poiGoToMap(el.dataset.goto)));
     list.querySelectorAll('[data-vis]').forEach(b=>b.addEventListener('click',async()=>{
       const p=pois.find(x=>x.id===b.dataset.vis); p.visited=!p.visited; await savePois();
     }));
@@ -861,7 +906,11 @@ function renderPois(){
     Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
     pois.forEach(p=>{
       markers[p.id] = L.marker([p.lat,p.lng],{icon:poiIcon(p)}).addTo(map)
-        .bindPopup('<b>'+esc(p.name)+'</b><br>'+esc(p.cat));
+        .bindPopup('<div style="min-width:170px"><b>'+esc(p.name)+'</b><br><span style="font-size:11px;color:#4A6468">'+esc(p.cat||'')+'</span><br>'+
+          '<div style="display:flex;gap:6px;margin-top:8px">'+
+          '<button onclick="poiToggleVisited(\''+p.id+'\')" style="flex:1;padding:8px;border:none;border-radius:8px;background:'+(p.visited?'#FBE9E4':'#DCEBE9')+';font-weight:600">'+(p.visited?'↩ Da visitare':'✓ Visitato')+'</button>'+
+          '<button onclick="poiShowInList(\''+p.id+'\')" style="padding:8px 10px;border:none;border-radius:8px;background:#DCEBE9">📋</button>'+
+          '</div></div>');
     });
   }
 }
@@ -2135,7 +2184,7 @@ function parseMapsExport(text, fname){
       const c = csvParseLine(l);
       const name = (c[ti]||'').trim(); if(!name) return;
       const url = ui>=0 ? (c[ui]||'') : '';
-      const m = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+      const m = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/) || url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
       if(m) push(name, +m[1], +m[2]); else pushGeo(name);
     });
   }
@@ -2180,6 +2229,47 @@ document.getElementById('impFile').addEventListener('change', async ev=>{
   catch(e){ impStatus(/\.zip$/i.test(f.name) ? 'Non riesco ad aprire questo ZIP: caricalo così come scaricato da Takeout.' : 'File non riconosciuto: usa CSV/GeoJSON/KML esportati da Google.'); return; }
   if(lists===null) return;
   if(!lists.length){ impStatus('Nessuna lista di luoghi trovata: su Takeout esporta il prodotto «Salvati».'); return; }
+  impShowPicker(lists);
+});
+
+/* ---- anteprima: scegli quali liste importare ---- */
+let impPending = [];
+function impShowPicker(lists){
+  impPending = lists;
+  impStatus(lists.length===1 ? '1 lista trovata: conferma per importare.' : lists.length+' liste trovate: scegli quali importare.');
+  const box = document.getElementById('impPick');
+  box.style.display = 'block';
+  box.innerHTML = lists.map((L,i)=>{
+    const coord = L.items.filter(x=>!x.geocode).length;
+    const geo = L.items.length - coord;
+    return '<label class="row" style="margin-top:6px;font-size:13px;gap:8px">'+
+      '<input type="checkbox" data-implist="'+i+'" checked style="width:18px;height:18px;accent-color:var(--teal)">'+
+      '<span style="flex:1">📌 '+esc(L.list)+'</span>'+
+      '<span class="small" style="font-family:var(--mono)">'+L.items.length+' luoghi'+(geo?' ('+geo+' da cercare)':'')+'</span></label>';
+  }).join('') +
+  '<div class="row mt8">'+
+  '<button class="btn btn-primary" id="impGo" style="flex:1">Importa selezionate</button>'+
+  '<button class="btn btn-ghost" id="impCancel" style="flex:1">Annulla</button></div>';
+  document.getElementById('impGo').addEventListener('click', ()=>{
+    const chosen = [...box.querySelectorAll('[data-implist]')].filter(c=>c.checked).map(c=>impPending[+c.dataset.implist]);
+    box.style.display='none'; box.innerHTML='';
+    if(chosen.length) impRun(chosen); else impStatus('Nessuna lista selezionata.');
+  });
+  document.getElementById('impCancel').addEventListener('click', ()=>{
+    box.style.display='none'; box.innerHTML=''; impPending=[]; impStatus('Importazione annullata.');
+  });
+}
+
+/* ---- importazione + coda persistente per le ricerche oltre le 25 ---- */
+let impGeoQueue = [];
+async function impSaveQueue(){ await store.set('impGeoQueue', impGeoQueue); impRenderQueue(); }
+function impRenderQueue(){
+  const box = document.getElementById('impQueueBox');
+  if(!impGeoQueue.length){ box.innerHTML=''; return; }
+  box.innerHTML = '<button class="btn btn-primary mt8" id="impResume" style="width:100%">▶ Continua ricerca posizioni ('+impGeoQueue.length+' rimasti)</button>';
+  document.getElementById('impResume').addEventListener('click', ()=>impGeoBatch());
+}
+async function impRun(lists){
   const existing = new Set(pois.map(p=>p.name.toLowerCase()));
   let direct=[], toGeo=[];
   lists.forEach(L=>L.items.forEach(i=>{
@@ -2189,27 +2279,38 @@ document.getElementById('impFile').addEventListener('change', async ev=>{
     (i.geocode ? toGeo : direct).push(it);
   }));
   if(!direct.length && !toGeo.length){ impStatus('Tutti i luoghi erano già nel tuo elenco.'); return; }
-  const geoBatch = toGeo.slice(0,25); // limite del servizio gratuito di ricerca
   direct.forEach(i=>pois.push({id:uid(), name:i.name, cat:i.cat, lat:i.lat, lng:i.lng, visited:false}));
   if(direct.length) await savePois();
-  impStatus(lists.length+' liste trovate ('+lists.map(l=>l.list).join(', ')+'). Importati '+direct.length+' luoghi con coordinate.'+
-    (geoBatch.length?' Cerco le posizioni di altri '+geoBatch.length+'…':''));
-  let found=0;
-  for(let i=0;i<geoBatch.length;i++){
-    impStatus('Cerco posizioni: '+(i+1)+'/'+geoBatch.length+' — «'+geoBatch[i].name+'»');
+  impGeoQueue = impGeoQueue.concat(toGeo.map(i=>({name:i.name, q:i.q, cat:i.cat})));
+  await impSaveQueue();
+  impStatus('Importati '+direct.length+' luoghi con coordinate precise.'+(impGeoQueue.length?' '+impGeoQueue.length+' senza coordinate: cerco le posizioni…':''));
+  if(impGeoQueue.length) impGeoBatch();
+}
+let impGeoRunning = false;
+async function impGeoBatch(){
+  if(impGeoRunning) return;
+  impGeoRunning = true;
+  const n = Math.min(25, impGeoQueue.length);   // limite di cortesia del servizio gratuito
+  let found=0, miss=0;
+  for(let i=0;i<n;i++){
+    const item = impGeoQueue[0];
+    impStatus('Cerco posizioni: '+(i+1)+'/'+n+' — «'+item.name+'»');
     try{
-      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(geoBatch[i].q));
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q='+encodeURIComponent(item.q||item.name));
       const d = await r.json();
-      if(d[0]){ pois.push({id:uid(), name:geoBatch[i].name, cat:geoBatch[i].cat, lat:+d[0].lat, lng:+d[0].lon, visited:false}); found++; }
-    }catch(e){}
+      if(d[0]){ pois.push({id:uid(), name:item.name, cat:item.cat, lat:+d[0].lat, lng:+d[0].lon, visited:false}); found++; }
+      else miss++;
+    }catch(e){ miss++; }
+    impGeoQueue.shift();
+    await impSaveQueue();
     await new Promise(res=>setTimeout(res, 1100));
   }
   if(found) await savePois();
-  const skipped = toGeo.length - geoBatch.length;
-  impStatus('Importazione completata: '+(direct.length+found)+' luoghi da '+lists.length+' liste.'+
-    (geoBatch.length-found>0 ? ' '+(geoBatch.length-found)+' non trovati.' : '')+
-    (skipped>0 ? ' '+skipped+' rimandati (max 25 ricerche per volta: ricarica lo ZIP per continuare).' : ''));
-});
+  impGeoRunning = false;
+  impStatus('Fatto: '+found+' posizioni trovate'+(miss?', '+miss+' non trovate':'')+'.'+
+    (impGeoQueue.length ? ' Restano '+impGeoQueue.length+' luoghi: tocca «Continua» quando vuoi.' : ' Coda completata ✓'));
+  impRenderQueue();
+}
 
 /* ---- drag & drop a pressione prolungata su cartelle e file ---- */
 const dTree = document.getElementById('docTreeEl');
@@ -2655,6 +2756,8 @@ document.getElementById('notes').addEventListener('input',()=>{
   await loadEvents();
   pois = (await store.get('pois')) || [];
   initMap(); renderPois();
+  impGeoQueue = (await store.get('impGeoQueue')) || [];
+  impRenderQueue();
   ckPersonal = (await store.get('ckPersonal')) || [];
   ckChecks = (await store.get('ckChecks')) || {};
   ckHidden = (await store.get('ckHidden')) || [];
