@@ -2144,25 +2144,32 @@ function parseMapsExport(text, fname){
 document.getElementById('impBtn').addEventListener('click', ()=>document.getElementById('impFile').click());
 async function impCollect(f){ // ritorna [{list, items}]
   if(/\.zip$/i.test(f.name)){
-    impStatus('Apro lo ZIP di Takeout…');
+    impStatus('Apro lo ZIP…');
     if(!window.JSZip){
       try{ await fbLoad('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'); }
       catch(e){ impStatus('Impossibile caricare il lettore ZIP (offline?).'); return null; }
     }
     const zip = await JSZip.loadAsync(f);
     const out = [];
-    const entries = Object.values(zip.files).filter(x=>!x.dir && /\.(csv|json|geojson)$/i.test(x.name)
-      && /saved|salvati|luoghi|maps/i.test(x.name));
+    const entries = Object.values(zip.files).filter(x=>!x.dir && /\.(csv|json|geojson)$/i.test(x.name));
     for(const en of entries){
-      const listName = en.name.split('/').pop().replace(/\.(csv|json|geojson)$/i,'');
+      const base = en.name.split('/').pop();
+      // scarto ciò che non è una lista di luoghi (ricerche, recensioni, foto, cronologia…)
+      if(/ricerch|search|recension|review|etichett|label|foto|photo|imag|domand|question|answer|comment|cronolog|history|preferenz|settings|profil/i.test(base)) continue;
       try{
-        const items = parseMapsExport(await en.async('string'), en.name);
-        if(items.length) out.push({list:listName, items});
+        const txt = (await en.async('string')).replace(/^\uFEFF/,'');
+        if(/\.csv$/i.test(base)){
+          const head = (txt.split(/\r?\n/)[0]||'').toLowerCase();
+          // è una lista di luoghi solo se ha le colonne Titolo/Title e URL
+          if(!((/titolo|title|nome|name/.test(head)) && /url/.test(head))) continue;
+        }
+        const items = parseMapsExport(txt, en.name);
+        if(items.length) out.push({list: base.replace(/\.(csv|json|geojson)$/i,''), items});
       }catch(e){}
     }
     return out;
   }
-  const items = parseMapsExport(await f.text(), f.name);
+  const items = parseMapsExport((await f.text()).replace(/^\uFEFF/,''), f.name);
   return items.length ? [{list:'Da visitare', items}] : [];
 }
 document.getElementById('impFile').addEventListener('change', async ev=>{
@@ -2170,9 +2177,9 @@ document.getElementById('impFile').addEventListener('change', async ev=>{
   if(!f) return;
   let lists=null;
   try{ lists = await impCollect(f); }
-  catch(e){ impStatus('File non riconosciuto: usa lo ZIP di Takeout oppure CSV/GeoJSON/KML.'); return; }
+  catch(e){ impStatus(/\.zip$/i.test(f.name) ? 'Non riesco ad aprire questo ZIP: caricalo così come scaricato da Takeout.' : 'File non riconosciuto: usa CSV/GeoJSON/KML esportati da Google.'); return; }
   if(lists===null) return;
-  if(!lists.length){ impStatus('Nessuna lista di luoghi trovata nel file.'); return; }
+  if(!lists.length){ impStatus('Nessuna lista di luoghi trovata: su Takeout esporta il prodotto «Salvati».'); return; }
   const existing = new Set(pois.map(p=>p.name.toLowerCase()));
   let direct=[], toGeo=[];
   lists.forEach(L=>L.items.forEach(i=>{
