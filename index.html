@@ -175,7 +175,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v16</span>
+  <span class="route" style="opacity:.7">v18</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -247,6 +247,25 @@ nav.tabs .ic{font-size:23px;line-height:1}
     <button class="btn btn-ghost mt8" id="evCancelEdit" style="width:100%;display:none">Annulla modifica</button>
   </div>
 
+  <div class="eyebrow coll" data-coll="itin">🗓 Itinerario per giorni</div>
+  <div class="card">
+    <div class="row">
+      <button class="icon-btn" id="itPrev">◀</button>
+      <input type="date" id="itDate" style="flex:1">
+      <button class="icon-btn" id="itNext">▶</button>
+    </div>
+    <div id="itList" class="mt8"></div>
+    <div class="row mt8">
+      <input type="time" id="itTime" style="max-width:110px">
+      <select id="itPoi" style="flex:1"></select>
+    </div>
+    <input class="mt8" id="itText" placeholder="…oppure testo libero (es. Pranzo da Ichiran)">
+    <div class="row mt8">
+      <button class="btn btn-primary" id="itAdd" style="flex:1">+ Aggiungi</button>
+      <button class="btn btn-ghost" id="itMap" style="flex:1">🗺 Giorno sulla mappa</button>
+    </div>
+  </div>
+
   <div class="eyebrow coll" data-coll="evlist">🗂 Tutti gli eventi</div>
   <div class="card" id="evList"></div>
 </section>
@@ -261,6 +280,9 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
   <div id="map"></div>
   <div class="map-hint">Cerca, oppure tocca la mappa: riconosco il luogo. 📍 da visitare · ✅ visitato</div>
+  <div class="small mt8" id="mapFilterInfo" style="display:none"></div>
+  <div class="row mt8"><button class="btn btn-ghost" id="tilesBtn" style="flex:1">📥 Salva questa zona per l'uso offline</button></div>
+  <div class="small" id="tilesStatus"></div>
 
   <div class="card mt12" id="poiFormCard" style="display:none">
     <div class="small" id="poiCoords"></div>
@@ -276,7 +298,15 @@ nav.tabs .ic{font-size:23px;line-height:1}
   </div>
 
   <div class="eyebrow coll" data-coll="poilist">📌 Luoghi salvati</div>
-  <div class="card" id="poiList"></div>
+  <div class="card">
+    <div class="row" style="margin-bottom:8px">
+      <input id="poiSearch" placeholder="Filtra per nome…" autocomplete="off" style="flex:1">
+      <button class="btn btn-ghost" id="poiTodoBtn" style="min-width:52px" title="Solo da visitare">📍</button>
+      <button class="btn btn-ghost" id="poiNearBtn" style="min-width:52px" title="Vicino a me">🧭</button>
+    </div>
+    <div class="small" id="poiFilterMsg"></div>
+    <div id="poiList"></div>
+  </div>
 
   <div class="eyebrow">📥 Importa da Google Maps</div>
   <div class="card">
@@ -531,7 +561,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v16</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v18</div>
 </section>
 </main>
 
@@ -725,6 +755,7 @@ function renderEvents(){
       '<div class="s">'+fmtDate(e.date)+(e.place?' · '+esc(e.place):'')+' · '+when+'</div>'+
       (e.url?'<a class="lnk" target="_blank" rel="noopener" href="'+esc(e.url)+'">🔗 Apri link</a><button class="copybtn" data-copy="'+esc(e.url)+'">📋</button>':'')+
       '</div><div class="acts">'+
+      '<button class="icon-btn" data-ics="'+e.id+'" title="Aggiungi al calendario del telefono">📅</button>'+
       '<button class="icon-btn" data-edit-ev="'+e.id+'" title="Modifica">✎</button>'+
       '<button class="icon-btn del" data-del-ev="'+e.id+'" title="Elimina">✕</button></div></div>';
   }).join('');
@@ -741,6 +772,8 @@ document.getElementById('evList').addEventListener('click', async ev=>{
     if(removed) showUndo('Evento «'+removed.name+'» eliminato', async ()=>{ events.push(removed); await saveEvents(); });
     return;
   }
+  const ics = ev.target.closest('[data-ics]');
+  if(ics){ const e = events.find(x=>String(x.id)===String(ics.dataset.ics)); if(e) icsDownload(e); return; }
   const ed = ev.target.closest('[data-edit-ev]');
   if(ed) evStartEdit(ed.dataset.editEv);
 });
@@ -820,15 +853,28 @@ function initMap(){
       document.getElementById('poiName').focus();
     });
     if(navigator.geolocation){
-      navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],11),()=>{},{timeout:4000});
+      navigator.geolocation.getCurrentPosition(p=>{ if(!tripDest) map.setView([p.coords.latitude,p.coords.longitude],11); },()=>{},{timeout:4000});
     }
   }catch(e){
     document.getElementById('map').innerHTML =
       '<div class="empty" style="margin:12px">La mappa non è disponibile in questa anteprima.<br>Apri il file sul telefono per vederla; l\'elenco dei punti funziona comunque.</div>';
   }
 }
-function poiIcon(p){
+const CAT_COLORS=['#E4573D','#2E6E6A','#D9A441','#5B7DB1','#8E5BB1','#4FA36B','#C2497A','#7A6A4F'];
+function catColor(cat){
+  let s=0; const c=String(cat||'');
+  for(let i=0;i<c.length;i++) s=(s*31+c.charCodeAt(i))>>>0;
+  return CAT_COLORS[s%CAT_COLORS.length];
+}
+function poiIconOld(p){
   return L.divIcon({className:'', html:'<div style="font-size:26px;line-height:1">'+(p.visited?'✅':'📍')+'</div>', iconSize:[26,26], iconAnchor:[13,26]});
+}
+function poiIcon(p){ // goccia colorata per elenco; visitato = sbiadita con ✓
+  const col = catColor(p.cat);
+  const op = p.visited ? 0.45 : 1;
+  const badge = p.visited ? '<circle cx="13" cy="11" r="7" fill="#fff"/><text x="13" y="15" text-anchor="middle" font-size="11" fill="#2E6E6A" font-weight="bold">✓</text>' : '<circle cx="13" cy="11" r="4.5" fill="#fff"/>';
+  return L.divIcon({className:'', iconSize:[26,34], iconAnchor:[13,32],
+    html:'<svg width="26" height="34" viewBox="0 0 26 34" style="opacity:'+op+'"><path d="M13 1C6.4 1 1 6.4 1 13c0 8.5 12 20 12 20s12-11.5 12-20C25 6.4 19.6 1 13 1z" fill="'+col+'" stroke="#fff" stroke-width="1.6"/>'+badge+'</svg>'});
 }
 let poiOpenGroups = new Set();
 window.poiToggleVisited = async id => {           // usato dai popup sulla mappa
@@ -850,12 +896,41 @@ function poiGoToMap(id){                          // dalla riga al pin sulla map
   map.setView([p.lat, p.lng], 16);
   if(markers[p.id]) markers[p.id].openPopup();
 }
+let poiQ='', poiOnlyTodo=false, poiNear=null;
+function poiVisibleList(){
+  let arr = pois;
+  if(poiQ) arr = arr.filter(p=>p.name.toLowerCase().includes(poiQ));
+  if(poiOnlyTodo) arr = arr.filter(p=>!p.visited);
+  return arr;
+}
 function renderPois(){
+  if(typeof itRefreshPoiSelect==='function') itRefreshPoiSelect();
   const list = document.getElementById('poiList');
-  if(!pois.length){ list.innerHTML='<div class="empty">Nessun punto salvato. Tocca la mappa per iniziare.</div>'; }
+  const shownPois = poiVisibleList();
+  if(poiNear){ // modalità «vicino a me»: lista piatta ordinata per distanza
+    const withPos = shownPois.filter(p=>Number.isFinite(p.lat));
+    const sorted = withPos.map(p=>({p, d: geoDist({lat:p.lat,lng:p.lng}, poiNear)})).sort((a,b)=>a.d-b.d).slice(0,30);
+    list.innerHTML = sorted.length ? sorted.map(({p,d})=>
+      '<div class="item'+(p.visited?' done':'')+'" data-poi-row="'+p.id+'">'+
+      '<div class="dn" data-goto="'+p.id+'" style="cursor:pointer;flex:1;min-width:0"><div class="t">'+esc(p.name)+'</div>'+
+      '<div class="s">📏 '+(d<1?Math.round(d*1000)+' m':d.toFixed(1)+' km')+' · '+esc(p.cat||'')+'</div></div>'+
+      '<div class="acts"><button class="icon-btn" data-vis="'+p.id+'">'+(p.visited?'↩':'✓')+'</button></div></div>'
+    ).join('') : '<div class="empty">Nessun luogo con posizione nei filtri attuali.</div>';
+    list.querySelectorAll('[data-goto]').forEach(el=>el.addEventListener('click',()=>poiGoToMap(el.dataset.goto)));
+    list.querySelectorAll('[data-vis]').forEach(b=>b.addEventListener('click',async()=>{
+      const p=pois.find(x=>x.id===b.dataset.vis); p.visited=!p.visited; await savePois();
+    }));
+    if(map){ // marker invariati
+      Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
+      pois.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).forEach(p=>{ markers[p.id]=L.marker([p.lat,p.lng],{icon:poiIcon(p)}).addTo(map); });
+    }
+    return;
+  }
+  if(!shownPois.length){ list.innerHTML='<div class="empty">'+(pois.length?'Nessun luogo corrisponde ai filtri.':'Nessun punto salvato. Tocca la mappa per iniziare.')+'</div>'; }
   else{
     const groups = {};
-    pois.forEach(p=>{ const g = p.cat||'Da visitare'; (groups[g]=groups[g]||[]).push(p); });
+    shownPois.forEach(p=>{ const g = p.cat||'Da visitare'; (groups[g]=groups[g]||[]).push(p); });
+    if(poiQ) Object.keys(groups).forEach(g=>poiOpenGroups.add(g));   // filtrando, apro i gruppi con risultati
     const gnames = Object.keys(groups).sort((a,b)=>a.localeCompare(b));
     if(gnames.length===1) poiOpenGroups.add(gnames[0]);   // un solo elenco: aperto
     list.innerHTML = gnames.map(g=>{
@@ -864,7 +939,7 @@ function renderPois(){
       const done = arr.filter(p=>p.visited).length;
       let html = '<div class="dnode" data-poi-group="'+esc(g)+'" style="cursor:pointer">'+
         '<span class="arrow">'+(open?'▾':'▸')+'</span>'+
-        '<div class="dn"><div class="t">📌 '+esc(g)+'</div><div class="s">'+arr.length+' luoghi · '+done+' visitati</div></div>'+
+        '<div class="dn"><div class="t"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+catColor(g)+';margin-right:6px"></span>'+esc(g)+'</div><div class="s">'+arr.length+' luoghi · '+done+' visitati</div></div>'+
         '<button class="icon-btn del" data-del-group="'+esc(g)+'" title="Elimina tutto l\'elenco">🗑</button></div>';
       if(open) html += arr.sort((a,b)=>a.name.localeCompare(b.name)).map(p=>
         '<div class="item'+(p.visited?' done':'')+'" data-poi-row="'+p.id+'" style="margin-left:14px">'+
@@ -917,7 +992,9 @@ function renderPois(){
   }
   if(map){
     Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
-    pois.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).forEach(p=>{
+    pois.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng))
+        .filter(p=>!mapDayFilter || mapDayFilter.ids.has(String(p.id)))
+        .forEach(p=>{
       markers[p.id] = L.marker([p.lat,p.lng],{icon:poiIcon(p)}).addTo(map)
         .bindPopup('<div style="min-width:170px"><b>'+esc(p.name)+'</b><br><span style="font-size:11px;color:#4A6468">'+esc(p.cat||'')+'</span><br>'+
           '<div style="display:flex;gap:6px;margin-top:8px">'+
@@ -1285,7 +1362,7 @@ async function fbConnect(cfgText, room, silent){
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     fb.code = code;
     // unione iniziale: aggiungo al database gli elementi locali che mancano (la checklist personale resta personale)
-    for(const [coll, arr] of [['events',events],['pois',pois]]){
+    for(const [coll, arr] of [['events',events],['pois',pois],['itin',itin]]){
       const remote = (await R(coll).once('value')).val() || {};
       arr.forEach(x=>{ if(x&&x.id&&!remote[x.id]) remote[x.id]=x; });
       await R(coll).set(remote);
@@ -1293,6 +1370,7 @@ async function fbConnect(cfgText, room, silent){
     // ascolto in tempo reale: il database è la fonte di verità
     R('events').on('value', async s=>{ events = Object.values(s.val()||{}); await store.set('events',events); renderEvents(); });
     R('pois').on('value', async s=>{ pois = Object.values(s.val()||{}); await store.set('pois',pois); renderPois(); });
+    R('itin').on('value', async s=>{ itin = Object.values(s.val()||{}); await store.set('itin',itin); renderItin(); renderToday(); });
     R('checklist').on('value', async s=>{ ckShared = Object.values(s.val()||{}); await store.set('ckShared',ckShared); renderCk(); });
     R('spese').on('value', async s=>{
       groupExpenses = Object.values(s.val()||{});
@@ -1348,7 +1426,7 @@ document.getElementById('fbConnectBtn').addEventListener('click', ()=>{
   fbConnect(document.getElementById('fbCfg').value, document.getElementById('fbRoom').value);
 });
 document.getElementById('fbOffBtn').addEventListener('click', async ()=>{
-  if(fb.on){ try{ ['events','pois','checklist','spese','membri'].forEach(c=>R(c).off()); }catch(e){} }
+  if(fb.on){ try{ ['events','pois','checklist','spese','membri','itin'].forEach(c=>R(c).off()); }catch(e){} }
   fb.on = false;
   groupExpenses = []; members = [];
   if(typeof renderMembers==='function') renderMembers();
@@ -2564,12 +2642,16 @@ if(themeMq && themeMq.addEventListener) themeMq.addEventListener('change', ()=>{
 /* ============ DESTINAZIONE + METEO (Open-Meteo, gratuito senza chiave) ============ */
 let tripDest = null, weatherHTML = '';
 const WMO = {0:'☀️',1:'🌤',2:'⛅',3:'☁️',45:'🌫',48:'🌫',51:'🌦',53:'🌦',55:'🌦',56:'🌧',57:'🌧',61:'🌧',63:'🌧',65:'🌧',66:'🌧',67:'🌧',71:'🌨',73:'🌨',75:'❄️',77:'🌨',80:'🌦',81:'🌧',82:'⛈',85:'🌨',86:'🌨',95:'⛈',96:'⛈',99:'⛈'};
+function mapCenterOnTrip(){
+  if(map && tripDest && Number.isFinite(tripDest.lat)) map.setView([tripDest.lat, tripDest.lng], 11);
+}
 async function loadWeather(){
   if(!tripDest){ weatherHTML=''; renderToday(); return; }
   try{
     const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude='+tripDest.lat+'&longitude='+tripDest.lng+
       '&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5');
     const d = await r.json();
+    if(d.timezone){ tripTZ = d.timezone; store.set('tripConf', {cur:tripCur, start:tripStart, end:tripEnd, dest:tripDest, tz:tripTZ}); }
     const t = d.daily;
     weatherHTML = '<div class="small" style="font-weight:600">Meteo a '+esc(tripDest.name)+'</div>'+
       '<div class="row mt8" style="justify-content:space-between;text-align:center">'+
@@ -2594,6 +2676,7 @@ document.getElementById('bgDestSet').addEventListener('click', async ()=>{
     info.textContent = '✓ '+d[0].display_name.split(',').slice(0,3).join(',');
     await saveBudget();
     loadWeather();
+    mapCenterOnTrip();
   }catch(e){ info.textContent='Ricerca non disponibile (offline o anteprima Claude).'; }
 });
 
@@ -2602,11 +2685,15 @@ function renderToday(){
   const el = document.getElementById('todayCard'); if(!el) return;
   const today = new Date().toISOString().slice(0,10);
   const evs = [...events].filter(e=>e.date.slice(0,10)===today).sort((a,b)=>a.date<b.date?-1:1);
-  let h = evs.length
+  let h = dualClockHTML();
+  h += evs.length
     ? evs.map(e=>'<div class="item"><div><div class="t">'+esc(e.name)+'</div>'+
         '<div class="s">'+new Date(e.date).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+(e.place?' · '+esc(e.place):'')+'</div></div>'+
         (e.url?'<a class="lnk" target="_blank" rel="noopener" href="'+esc(e.url)+'">🔗</a>':'')+'</div>').join('')
     : '<div class="small">Nessun evento in programma oggi.</div>';
+  const dayIt = itin.filter(e=>e.date===today).sort((a,b)=>(a.time||'99')<(b.time||'99')?-1:1);
+  if(dayIt.length) h += '<div class="small mt8" style="font-weight:600">🗓 Itinerario di oggi:</div>'+
+    dayIt.map(en=>'<div class="small">'+(en.time?en.time+' · ':'')+esc(itEntryLabel(en))+'</div>').join('');
   const todo = pois.filter(p=>!p.visited).length;
   if(todo) h += '<div class="small mt8">🗺 '+todo+' punt'+(todo===1?'o':'i')+' ancora da visitare sulla mappa.</div>';
   if(weatherHTML) h += '<div class="mt8" style="border-top:1px dashed var(--line);padding-top:8px">'+weatherHTML+'</div>';
@@ -2614,7 +2701,7 @@ function renderToday(){
 }
 
 /* ============ MULTI-VIAGGIO ============ */
-const TRIP_KEYS = ['events','pois','expenses','budgetTotal','tripConf','ckPersonal','ckChecks','ckHidden','ckShared','notes','fbConf','fxSel'];
+const TRIP_KEYS = ['events','pois','expenses','budgetTotal','tripConf','ckPersonal','ckChecks','ckHidden','ckShared','notes','fbConf','fxSel','itin'];
 let trips=[], curTrip=null;
 async function tripSnapshot(){
   const d = {};
@@ -2811,6 +2898,156 @@ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
 }
 
+/* ============ FILTRI LUOGHI ============ */
+document.getElementById('poiSearch').addEventListener('input', e=>{ poiQ=e.target.value.trim().toLowerCase(); renderPois(); });
+document.getElementById('poiTodoBtn').addEventListener('click', function(){
+  poiOnlyTodo=!poiOnlyTodo;
+  this.style.background = poiOnlyTodo ? 'var(--teal)' : '';
+  this.style.color = poiOnlyTodo ? '#fff' : '';
+  renderPois();
+});
+document.getElementById('poiNearBtn').addEventListener('click', function(){
+  const msg = document.getElementById('poiFilterMsg');
+  if(poiNear){ poiNear=null; this.style.background=''; this.style.color=''; msg.textContent=''; renderPois(); return; }
+  if(!navigator.geolocation){ msg.textContent='GPS non disponibile su questo dispositivo.'; return; }
+  msg.textContent='Cerco la tua posizione…';
+  navigator.geolocation.getCurrentPosition(p=>{
+    poiNear={lat:p.coords.latitude, lng:p.coords.longitude};
+    this.style.background='var(--teal)'; this.style.color='#fff';
+    msg.textContent='Ordinati per distanza da te (tocca di nuovo 🧭 per uscire).';
+    renderPois();
+  },()=>{ msg.textContent='Posizione negata: attiva il GPS e i permessi per Chrome.'; },{enableHighAccuracy:true, timeout:8000});
+});
+
+/* ============ DOPPIO OROLOGIO (fuso della destinazione) ============ */
+let tripTZ = null;
+function dualClockHTML(){
+  if(!tripTZ || !tripDest) return '';
+  try{
+    const here = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+    const there = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',timeZone:tripTZ});
+    if(here===there) return '';
+    return '<div class="small" style="font-family:var(--mono);margin-bottom:8px">🕐 Qui '+here+' · '+esc(tripDest.name)+' '+there+'</div>';
+  }catch(e){ return ''; }
+}
+
+/* ============ EVENTO → CALENDARIO DEL TELEFONO (.ics) ============ */
+function icsDownload(e){
+  const dt = e.date.replace(/[-:]/g,'').slice(0,13)+'00';
+  const end = new Date(new Date(e.date).getTime()+3600000);
+  const p2 = n=>String(n).padStart(2,'0');
+  const dtEnd = end.getFullYear()+p2(end.getMonth()+1)+p2(end.getDate())+'T'+p2(end.getHours())+p2(end.getMinutes())+'00';
+  const ics = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//CompagnoDiViaggio//IT','BEGIN:VEVENT',
+    'UID:'+e.id+'@compagno-di-viaggio','DTSTART:'+dt,'DTEND:'+dtEnd,
+    'SUMMARY:'+e.name.replace(/[\n,;]/g,' '),
+    e.place?'LOCATION:'+e.place.replace(/[\n,;]/g,' '):'',
+    e.url?'URL:'+e.url:'','END:VEVENT','END:VCALENDAR'].filter(Boolean).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));
+  a.download=e.name.replace(/[^\w\s-]/g,'').trim()+'.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ============ ZONA OFFLINE (tessere mappa in cache) ============ */
+const t2x=(lon,z)=>Math.floor((lon+180)/360*Math.pow(2,z));
+const t2y=(lat,z)=>Math.floor((1-Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2*Math.pow(2,z));
+document.getElementById('tilesBtn').addEventListener('click', async ()=>{
+  const st = document.getElementById('tilesStatus');
+  if(!map){ st.textContent='Mappa non disponibile.'; return; }
+  if(!('serviceWorker' in navigator) || !navigator.serviceWorker.controller){
+    st.textContent='Funziona solo nell\'app installata dal sito (il salvataggio usa la cache dell\'app).'; return;
+  }
+  const b = map.getBounds();
+  const z0 = Math.max(11, Math.min(14, Math.round(map.getZoom())));
+  const urls = [];
+  for(const z of [z0, z0+1, z0+2].filter(z=>z<=16)){
+    const x1=t2x(b.getWest(),z), x2=t2x(b.getEast(),z), y1=t2y(b.getNorth(),z), y2=t2y(b.getSouth(),z);
+    for(let x=x1;x<=x2;x++) for(let y=y1;y<=y2;y++){
+      urls.push('https://tile.openstreetmap.org/'+z+'/'+x+'/'+y+'.png');
+      if(urls.length>700) break;
+    }
+    if(urls.length>700) break;
+  }
+  st.textContent='Scarico '+urls.length+' tessere…';
+  let done=0;
+  for(let i=0;i<urls.length;i+=6){
+    await Promise.all(urls.slice(i,i+6).map(u=>fetch(u,{mode:'no-cors'}).catch(()=>{})));
+    done=Math.min(urls.length,i+6);
+    st.textContent='Scarico tessere: '+done+'/'+urls.length;
+    await new Promise(r=>setTimeout(r,120));
+  }
+  st.textContent='✓ Zona salvata ('+urls.length+' tessere, 3 livelli di zoom): qui la mappa funzionerà anche offline.';
+});
+
+/* ============ ITINERARIO PER GIORNI (condiviso col gruppo) ============ */
+let itin=[], itDateVal=new Date().toISOString().slice(0,10), mapDayFilter=null;
+async function saveItin(){ await store.set('itin', itin); fbPush('itin', itin); renderItin(); renderToday(); }
+function itRefreshPoiSelect(){
+  const sel = document.getElementById('itPoi'); if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— luogo salvato (facoltativo) —</option>';
+  const groups={};
+  pois.forEach(p=>{ const g=p.cat||'Da visitare'; (groups[g]=groups[g]||[]).push(p); });
+  Object.keys(groups).sort().forEach(g=>{
+    const og=document.createElement('optgroup'); og.label=g;
+    groups[g].sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>og.appendChild(new Option(p.name, p.id)));
+    sel.appendChild(og);
+  });
+  sel.value=cur;
+}
+function itEntryLabel(en){
+  if(en.poiId){ const p=pois.find(x=>String(x.id)===String(en.poiId)); return p?p.name:'(luogo eliminato)'; }
+  return en.text||'';
+}
+function renderItin(){
+  const el = document.getElementById('itList'); if(!el) return;
+  document.getElementById('itDate').value = itDateVal;
+  const day = itin.filter(e=>e.date===itDateVal).sort((a,b)=>(a.time||'99')<(b.time||'99')?-1:1);
+  el.innerHTML = day.length ? day.map(en=>
+    '<div class="item"><div style="flex:1;min-width:0"><div class="t">'+(en.time?'<span style="font-family:var(--mono);color:var(--teal)">'+en.time+'</span> · ':'')+esc(itEntryLabel(en))+'</div></div>'+
+    '<div class="acts">'+(en.poiId?'<button class="icon-btn" data-it-map="'+en.poiId+'">🗺</button>':'')+
+    '<button class="icon-btn del" data-it-del="'+en.id+'">✕</button></div></div>'
+  ).join('') : '<div class="empty">Giorno libero. Aggiungi tappe qui sotto.</div>';
+}
+document.getElementById('itDate').addEventListener('change', e=>{ if(e.target.value){ itDateVal=e.target.value; renderItin(); } });
+document.getElementById('itPrev').addEventListener('click', ()=>{ itDateVal=new Date(new Date(itDateVal).getTime()-86400000).toISOString().slice(0,10); renderItin(); });
+document.getElementById('itNext').addEventListener('click', ()=>{ itDateVal=new Date(new Date(itDateVal).getTime()+86400000).toISOString().slice(0,10); renderItin(); });
+document.getElementById('itAdd').addEventListener('click', async ()=>{
+  const poiId = document.getElementById('itPoi').value || null;
+  const text = document.getElementById('itText').value.trim();
+  if(!poiId && !text) return;
+  itin.push({id:uid(), date:itDateVal, time:document.getElementById('itTime').value||'', poiId, text});
+  document.getElementById('itText').value=''; document.getElementById('itPoi').value=''; document.getElementById('itTime').value='';
+  await saveItin();
+});
+document.getElementById('itList').addEventListener('click', async ev=>{
+  const gm = ev.target.closest('[data-it-map]');
+  if(gm){ document.querySelector('nav.tabs button[data-view="mappa"]').click(); poiGoToMap(gm.dataset.itMap); return; }
+  const del = ev.target.closest('[data-it-del]'); if(!del) return;
+  const removed = itin.find(x=>String(x.id)===String(del.dataset.itDel));
+  itin = itin.filter(x=>String(x.id)!==String(del.dataset.itDel));
+  await saveItin();
+  if(removed) showUndo('Tappa «'+itEntryLabel(removed)+'» eliminata', async ()=>{ itin.push(removed); await saveItin(); });
+});
+document.getElementById('itMap').addEventListener('click', ()=>{
+  const ids = new Set(itin.filter(e=>e.date===itDateVal && e.poiId).map(e=>String(e.poiId)));
+  const dayPois = pois.filter(p=>ids.has(String(p.id)) && Number.isFinite(p.lat));
+  if(!dayPois.length){ document.getElementById('itList').insertAdjacentHTML('afterbegin','<div class="small">Nessuna tappa con posizione in questo giorno.</div>'); return; }
+  mapDayFilter = {date:itDateVal, ids};
+  document.querySelector('nav.tabs button[data-view="mappa"]').click();
+  const info = document.getElementById('mapFilterInfo');
+  info.style.display='block';
+  info.innerHTML = '🗓 Mostro solo l\'itinerario del '+new Date(itDateVal).toLocaleDateString('it-IT',{day:'numeric',month:'short'})+' ('+dayPois.length+' tappe) — <a href="#" id="mapFilterOff" style="color:var(--pin)">mostra tutti</a>';
+  document.getElementById('mapFilterOff').addEventListener('click', e=>{
+    e.preventDefault(); mapDayFilter=null; info.style.display='none'; renderPois();
+  });
+  renderPois();
+  if(map){
+    setTimeout(()=>{ map.invalidateSize(); map.fitBounds(dayPois.map(p=>[p.lat,p.lng]), {padding:[30,30], maxZoom:15}); }, 150);
+  }
+});
+
 let notesTimer=null;
 document.getElementById('notes').addEventListener('input',()=>{
   clearTimeout(notesTimer);
@@ -2840,6 +3077,9 @@ document.getElementById('notes').addEventListener('input',()=>{
   initMap(); renderPois();
   impGeoQueue = (await store.get('impGeoQueue')) || [];
   impRenderQueue();
+  itin = (await store.get('itin')) || [];
+  if(tripStart && itDateVal < tripStart) itDateVal = tripStart;   // parto dal primo giorno di viaggio
+  renderItin();
   ckPersonal = (await store.get('ckPersonal')) || [];
   ckChecks = (await store.get('ckChecks')) || {};
   ckHidden = (await store.get('ckHidden')) || [];
@@ -2872,8 +3112,10 @@ document.getElementById('notes').addEventListener('input',()=>{
     document.getElementById('bgEnd').value = tripEnd;
     if(tc.dest && tc.dest.lat){
       tripDest = tc.dest;
+      if(tc.tz) tripTZ = tc.tz;
       document.getElementById('bgDest').value = tripDest.name;
       document.getElementById('bgDestInfo').textContent = '✓ '+tripDest.name;
+      mapCenterOnTrip();
     }
   }
   bgCurSel.value = tripCur; refreshCurToggles();

@@ -1,7 +1,7 @@
 /* Service worker — Compagno di Viaggio
    Strategia: l'app funziona offline; quando c'è rete, la pagina si aggiorna da GitHub.
    Per pubblicare una nuova versione dell'app basta cambiare VERSION qui sotto. */
-const VERSION = 'v16';
+const VERSION = 'v18';
 const SHELL = 'viaggio-shell-' + VERSION;
 const RUNTIME = 'viaggio-runtime';
 const PRECACHE = [
@@ -56,7 +56,7 @@ self.addEventListener('fetch', e => {
           c.put(e.request, copy);
           // limito la cache dei tile per non gonfiare la memoria
           if (url.host.includes('tile.openstreetmap.org')) {
-            c.keys().then(keys => { if (keys.length > 400) c.delete(keys[0]); });
+            c.keys().then(keys => { if (keys.length > 2500) c.delete(keys[0]); });
           }
         });
       }
