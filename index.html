@@ -156,7 +156,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
   border-radius:6px;padding:2px 6px;letter-spacing:.08em;text-transform:uppercase}
 
 /* ---- mappa ---- */
-#map{height:320px;border-radius:var(--radius);border:1px solid var(--line);background:var(--teal-soft)}
+#map{height:320px;border-radius:var(--radius);border:1px solid var(--line);background:var(--teal-soft);position:relative;z-index:0}
 .map-hint{font-size:12px;color:var(--ink-soft);margin-top:6px}
 .leaflet-container{font-family:var(--sans)}
 
@@ -175,7 +175,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v21</span>
+  <span class="route" style="opacity:.7">v22</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -260,10 +260,14 @@ nav.tabs .ic{font-size:23px;line-height:1}
   </div>
   <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
   <div id="map"></div>
-  <div class="map-hint">Cerca, oppure tocca la mappa: riconosco il luogo. 📍 da visitare · ✅ visitato</div>
-  <div class="small mt8" id="mapFilterInfo" style="display:none"></div>
-  <div class="row mt8"><button class="btn btn-ghost" id="itBuildBtn" style="flex:1">🗓 Componi itinerario toccando i pin</button></div>
+  <div class="row mt8">
+    <button class="btn btn-ghost" id="itBuildBtn" style="flex:1">🗓 Componi itinerario</button>
+    <button class="btn btn-ghost" id="tilesBtn" style="min-width:56px" title="Salva questa zona per l'uso offline">📥</button>
+  </div>
+  <div class="small" id="tilesStatus"></div>
   <div class="small" id="itBuildBar" style="display:none"></div>
+  <div class="map-hint">Cerca, oppure tocca la mappa: riconosco il luogo. In modalità itinerario tocca i pin per aggiungere le tappe.</div>
+  <div class="small mt8" id="mapFilterInfo" style="display:none"></div>
 
   <div class="eyebrow coll" data-coll="itin">🗓 Itinerario per giorni</div>
   <div class="card">
@@ -291,8 +295,6 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
   </div>
 
-  <div class="row mt8"><button class="btn btn-ghost" id="tilesBtn" style="flex:1">📥 Salva questa zona per l'uso offline</button></div>
-  <div class="small" id="tilesStatus"></div>
 
   <div class="card mt12" id="poiFormCard" style="display:none">
     <div class="small" id="poiCoords"></div>
@@ -593,7 +595,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v21</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v22</div>
 </section>
 </main>
 
@@ -1210,8 +1212,14 @@ document.getElementById('mapSearch').addEventListener('input', ()=>{
   const q = document.getElementById('mapSearch').value.trim();
   if(q.length < 3){ document.getElementById('mapResults').style.display='none'; return; }
   acTimer = setTimeout(async ()=>{
-    const items = await photonSearch(q);
-    if(items && items.length) mapShowResults(items);
+    // due ricerche in parallelo: mondiale (senza ancora) + vicino alla mappa; unisco senza doppioni
+    const [glob, loc] = await Promise.all([photonSearch(q, null), photonSearch(q)]);
+    const seen = new Set(), items = [];
+    [...(glob||[]), ...(loc||[])].forEach(it=>{
+      const k = it.name+'|'+it.lat.toFixed(3)+'|'+it.lng.toFixed(3);
+      if(!seen.has(k)){ seen.add(k); items.push(it); }
+    });
+    if(items.length) mapShowResults(items.slice(0,7));
   }, 350);
 });
 document.getElementById('mapSearchBtn').addEventListener('click', mapDoSearch);
@@ -2736,7 +2744,7 @@ function renderToday(){
         '<div class="s">'+new Date(e.date).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+(e.place?' · '+esc(e.place):'')+'</div></div>'+
         (e.url?'<a class="lnk" target="_blank" rel="noopener" href="'+esc(e.url)+'">🔗</a>':'')+'</div>').join('')
     : '<div class="small">Nessun evento in programma oggi.</div>';
-  const dayIt = itin.filter(e=>e.date===today).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
+  const dayIt = itin.filter(e=>e.date===today).sort(itCmp);
   if(dayIt.length) h += '<div class="small mt8" style="font-weight:600">🗓 Itinerario di oggi:</div>'+
     dayIt.map((en,i)=>'<div class="small">'+(i+1)+'. '+(itTimeLabel(en)?itTimeLabel(en)+' · ':'')+esc(itEntryLabel(en))+'</div>').join('');
   const todo = pois.filter(p=>!p.visited).length;
@@ -3035,7 +3043,7 @@ document.getElementById('tilesBtn').addEventListener('click', async ()=>{
 /* ============ ITINERARIO PER GIORNI (condiviso col gruppo) ============ */
 let itin=[], itDateVal=new Date().toISOString().slice(0,10), mapDayFilter=null, itBuildMode=false, itEditId=null;
 function itDayOrder(date){
-  const entries = itin.filter(e=>e.date===date && e.poiId).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
+  const entries = itin.filter(e=>e.date===date && e.poiId).sort(itCmp);
   const order = new Map(), route = [];
   let n = 0;
   entries.forEach(en=>{
@@ -3068,6 +3076,8 @@ function itRefreshPoiSelect(){
 }
 const IT_SLOT = {m:['🌅','08:00'], p:['☀️','14:00'], s:['🌙','19:00']};
 const itSortKey = en => en.time || (IT_SLOT[en.slot]||['','99'])[1];
+const itCmp = (a,b)=>{ const ka=itSortKey(a), kb=itSortKey(b); if(ka!==kb) return ka<kb?-1:1; return (a.ord||0)-(b.ord||0); };
+const itNextOrd = ()=> itin.reduce((m,e)=>Math.max(m, e.ord||0), 0) + 1;
 const itTimeLabel = en => en.time ? (en.slot?(IT_SLOT[en.slot]||[''])[0]+' ':'')+en.time : (en.slot?(IT_SLOT[en.slot]||[''])[0]:'');
 function itEntryLabel(en){
   if(en.poiId){ const p=pois.find(x=>String(x.id)===String(en.poiId)); return p?p.name:'(luogo eliminato)'; }
@@ -3076,8 +3086,16 @@ function itEntryLabel(en){
 function renderItin(){
   const el = document.getElementById('itList'); if(!el) return;
   document.getElementById('itDate').value = itDateVal;
-  const day = itin.filter(e=>e.date===itDateVal).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
+  const day = itin.filter(e=>e.date===itDateVal).sort(itCmp);
+  const chip = (en,v)=>'<button class="icon-btn" data-it-slot="'+en.id+':'+v+'" style="width:32px;height:32px;font-size:13px;'+(en.slot===v?'background:var(--teal);':'opacity:.45;')+'">'+IT_SLOT[v][0]+'</button>';
+  const handle = en=>'<span data-it-drag="'+en.id+'" style="cursor:grab;touch-action:none;padding:6px 8px 6px 2px;color:var(--ink-soft);font-size:16px;user-select:none">⠿</span>';
   el.innerHTML = day.length ? day.map((en,i)=>{
+    if(itBuildMode){
+      return '<div class="item" data-it-row="'+en.id+'">'+handle(en)+
+        '<div style="flex:1;min-width:0"><div class="t"><span style="display:inline-block;min-width:20px;height:20px;border-radius:50%;background:var(--teal);color:#fff;text-align:center;font-size:12px;line-height:20px;margin-right:6px">'+(i+1)+'</span>'+esc(itEntryLabel(en))+'</div></div>'+
+        '<div class="acts">'+chip(en,'m')+chip(en,'p')+chip(en,'s')+
+        '<button class="icon-btn del" data-it-del="'+en.id+'">✕</button></div></div>';
+    }
     if(String(en.id)===String(itEditId)){
       const so = v => ' '+(en.slot===v?'selected':'');
       return '<div class="item"><div class="row" style="flex:1;min-width:0">'+
@@ -3087,7 +3105,7 @@ function renderItin(){
         '<div class="acts"><button class="icon-btn" data-it-save="'+en.id+'" title="Salva">✓</button>'+
         '<button class="icon-btn" data-it-cancel="1" title="Annulla">✕</button></div></div>';
     }
-    return '<div class="item"><div style="flex:1;min-width:0"><div class="t"><span style="display:inline-block;min-width:20px;height:20px;border-radius:50%;background:var(--teal);color:#fff;text-align:center;font-size:12px;line-height:20px;margin-right:6px">'+(i+1)+'</span>'+(itTimeLabel(en)?'<span style="font-family:var(--mono);color:var(--teal)">'+itTimeLabel(en)+'</span> · ':'')+esc(itEntryLabel(en))+'</div></div>'+
+    return '<div class="item" data-it-row="'+en.id+'">'+handle(en)+'<div style="flex:1;min-width:0"><div class="t"><span style="display:inline-block;min-width:20px;height:20px;border-radius:50%;background:var(--teal);color:#fff;text-align:center;font-size:12px;line-height:20px;margin-right:6px">'+(i+1)+'</span>'+(itTimeLabel(en)?'<span style="font-family:var(--mono);color:var(--teal)">'+itTimeLabel(en)+'</span> · ':'')+esc(itEntryLabel(en))+'</div></div>'+
     '<div class="acts">'+(en.poiId?'<button class="icon-btn" data-it-map="'+en.poiId+'">🗺</button>':'')+
     '<button class="icon-btn" data-it-edit="'+en.id+'" title="Orario / fascia">✎</button>'+
     '<button class="icon-btn del" data-it-del="'+en.id+'">✕</button></div></div>';
@@ -3101,11 +3119,18 @@ document.getElementById('itAdd').addEventListener('click', async ()=>{
   const poiId = document.getElementById('itPoi').value || null;
   const text = document.getElementById('itText').value.trim();
   if(!poiId && !text) return;
-  itin.push({id:uid(), date:itDateVal, time:document.getElementById('itTime').value||'', slot:document.getElementById('itSlot').value||'', poiId, text});
+  itin.push({id:uid(), date:itDateVal, time:document.getElementById('itTime').value||'', slot:document.getElementById('itSlot').value||'', poiId, text, ord:itNextOrd()});
   document.getElementById('itText').value=''; document.getElementById('itPoi').value=''; document.getElementById('itTime').value=''; document.getElementById('itSlot').value='';
   await saveItin();
 });
 document.getElementById('itList').addEventListener('click', async ev=>{
+  const sl = ev.target.closest('[data-it-slot]');
+  if(sl){
+    const [id, v] = sl.dataset.itSlot.split(':');
+    const en = itin.find(x=>String(x.id)===String(id));
+    if(en){ en.slot = v; await saveItin(); if(itBuildMode){ itBuildBarRender(); renderPois(); } }
+    return;
+  }
   const ed = ev.target.closest('[data-it-edit]');
   if(ed){ itEditId = ed.dataset.itEdit; renderItin(); return; }
   const cn = ev.target.closest('[data-it-cancel]');
@@ -3129,7 +3154,11 @@ document.getElementById('itList').addEventListener('click', async ev=>{
 async function itBuildTap(poiId){
   const existing = itin.filter(e=>e.date===itDateVal && String(e.poiId)===String(poiId));
   if(existing.length) itin = itin.filter(e=>!(e.date===itDateVal && String(e.poiId)===String(poiId)));
-  else itin.push({id:uid(), date:itDateVal, time:'', slot:'', poiId, text:''});
+  else{
+    const day = itin.filter(e=>e.date===itDateVal).sort(itCmp);
+    const inherited = day.length ? (day[day.length-1].slot||'m') : 'm';   // la fascia segue il pin precedente
+    itin.push({id:uid(), date:itDateVal, time:'', slot:inherited, poiId, text:'', ord:itNextOrd()});
+  }
   await saveItin();
   itBuildBarRender();
   renderPois();
@@ -3165,8 +3194,87 @@ function itBuildToggle(on){
 }
 document.getElementById('itBuildBtn').addEventListener('click', ()=>itBuildToggle(!itBuildMode));
 
+/* trascina ⠿ per riordinare le tappe del giorno */
+let itDrag = null;
+function itGhost(){
+  let g = document.getElementById('dragGhost');
+  if(!g){ g = document.createElement('div'); g.id='dragGhost'; g.style.display='none'; document.body.appendChild(g); }
+  return g;
+}
+function itDropApply(targetId, before){
+  const day = itin.filter(e=>e.date===itDateVal).sort(itCmp);
+  const from = day.findIndex(e=>String(e.id)===String(itDrag));
+  let to = day.findIndex(e=>String(e.id)===String(targetId));
+  if(from<0 || to<0) return;
+  const [moved] = day.splice(from,1);
+  if(from < to) to--;               // l'indice slitta dopo la rimozione
+  day.splice(before ? to : to+1, 0, moved);
+  const pos = day.indexOf(moved);
+  const neigh = day[pos-1] || day[pos+1];
+  if(neigh && !moved.time) moved.slot = neigh.slot||'';      // la fascia si adatta ai vicini
+  day.forEach((e,i)=>{ e.ord = i+1; });
+  saveItin();
+  if(itBuildMode){ itBuildBarRender(); renderPois(); }
+}
+function itPointRow(x,y){
+  const el = document.elementFromPoint(x,y);
+  return el ? el.closest('[data-it-row]') : null;
+}
+function itDragMove(x,y){
+  const g = itGhost();
+  g.style.left = (x+10)+'px'; g.style.top = (y-14)+'px';
+  document.querySelectorAll('#itList .droptgt').forEach(r=>r.classList.remove('droptgt'));
+  const row = itPointRow(x,y);
+  if(row && row.dataset.itRow!==String(itDrag)) row.classList.add('droptgt');
+}
+function itDragEnd(x,y){
+  const g = itGhost();
+  g.style.display='none';
+  document.querySelectorAll('#itList .droptgt').forEach(r=>r.classList.remove('droptgt'));
+  const row = itPointRow(x,y);
+  if(row && row.dataset.itRow!==String(itDrag)){
+    const r = row.getBoundingClientRect();
+    itDropApply(row.dataset.itRow, y < r.top + r.height/2);
+  }
+  itDrag = null;
+}
+document.getElementById('itList').addEventListener('mousedown', e=>{
+  const hd = e.target.closest('[data-it-drag]'); if(!hd) return;
+  e.preventDefault();
+  itDrag = hd.dataset.itDrag;
+  const en = itin.find(x=>String(x.id)===String(itDrag));
+  const g = itGhost();
+  g.textContent = '⠿ '+itEntryLabel(en); g.style.display='block';
+  itDragMove(e.clientX, e.clientY);
+  const mv = ev=>itDragMove(ev.clientX, ev.clientY);
+  const up = ev=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); itDragEnd(ev.clientX, ev.clientY); };
+  document.addEventListener('mousemove',mv);
+  document.addEventListener('mouseup',up);
+});
+document.getElementById('itList').addEventListener('touchstart', e=>{
+  const hd = e.target.closest('[data-it-drag]'); if(!hd) return;
+  e.preventDefault();
+  itDrag = hd.dataset.itDrag;
+  const en = itin.find(x=>String(x.id)===String(itDrag));
+  const g = itGhost();
+  g.textContent = '⠿ '+itEntryLabel(en); g.style.display='block';
+  const t = e.touches[0];
+  itDragMove(t.clientX, t.clientY);
+}, {passive:false});
+document.getElementById('itList').addEventListener('touchmove', e=>{
+  if(!itDrag) return;
+  e.preventDefault();
+  const t = e.touches[0];
+  itDragMove(t.clientX, t.clientY);
+}, {passive:false});
+document.getElementById('itList').addEventListener('touchend', e=>{
+  if(!itDrag) return;
+  const t = e.changedTouches[0];
+  itDragEnd(t.clientX, t.clientY);
+});
+
 document.getElementById('itMap').addEventListener('click', ()=>{
-  const dayEntries = itin.filter(e=>e.date===itDateVal && e.poiId).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
+  const dayEntries = itin.filter(e=>e.date===itDateVal && e.poiId).sort(itCmp);
   const order = new Map(); const route = [];
   let n = 0;
   dayEntries.forEach(en=>{
@@ -3226,6 +3334,7 @@ document.getElementById('notes').addEventListener('input',()=>{
   impGeoQueue = (await store.get('impGeoQueue')) || [];
   impRenderQueue();
   itin = (await store.get('itin')) || [];
+  itin.forEach((e,i)=>{ if(typeof e.ord!=='number') e.ord=i; });
   if(tripStart && itDateVal < tripStart) itDateVal = tripStart;   // parto dal primo giorno di viaggio
   renderItin();
   ckPersonal = (await store.get('ckPersonal')) || [];
