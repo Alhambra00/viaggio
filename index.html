@@ -175,7 +175,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v18</span>
+  <span class="route" style="opacity:.7">v19</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -255,9 +255,16 @@ nav.tabs .ic{font-size:23px;line-height:1}
       <button class="icon-btn" id="itNext">▶</button>
     </div>
     <div id="itList" class="mt8"></div>
+    <select class="mt8" id="itCat"></select>
+    <select class="mt8" id="itPoi"></select>
     <div class="row mt8">
-      <input type="time" id="itTime" style="max-width:110px">
-      <select id="itPoi" style="flex:1"></select>
+      <select id="itSlot" style="max-width:150px">
+        <option value="">fascia oraria…</option>
+        <option value="m">🌅 Mattina</option>
+        <option value="p">☀️ Pomeriggio</option>
+        <option value="s">🌙 Sera</option>
+      </select>
+      <input type="time" id="itTime" style="flex:1">
     </div>
     <input class="mt8" id="itText" placeholder="…oppure testo libero (es. Pranzo da Ichiran)">
     <div class="row mt8">
@@ -336,11 +343,6 @@ nav.tabs .ic{font-size:23px;line-height:1}
       <input type="date" id="bgEnd" title="Fine viaggio">
     </div>
     <div class="small mt8">Date del viaggio (per il budget giornaliero).</div>
-    <div class="row mt8">
-      <input id="bgDest" placeholder="Città di destinazione (per il meteo in Home)">
-      <button class="btn btn-primary" id="bgDestSet" style="min-width:56px">OK</button>
-    </div>
-    <div class="small mt8" id="bgDestInfo"></div>
     <div class="result-big" id="bgRemain">—</div>
     <div class="small" id="bgDetail"></div>
     <div style="height:8px;background:var(--teal-soft);border-radius:6px;margin-top:10px;overflow:hidden">
@@ -510,6 +512,16 @@ nav.tabs .ic{font-size:23px;line-height:1}
     <div class="small mt8" id="tripInfo">Ogni viaggio è separato; i Documenti sono comuni.</div>
   </div>
 
+  <div class="eyebrow">🌍 Destinazione del viaggio</div>
+  <div class="card">
+    <div class="row">
+      <input id="bgDest" placeholder="Città di destinazione">
+      <button class="btn btn-primary" id="bgDestSet" style="min-width:56px">OK</button>
+    </div>
+    <div class="small mt8" id="bgDestInfo"></div>
+    <div class="small mt8">Regola meteo, doppio orologio e centratura della mappa per tutto il viaggio.</div>
+  </div>
+
   <div class="eyebrow">🎨 Aspetto</div>
   <div class="card">
     <select id="themeSel">
@@ -561,7 +573,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v18</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v19</div>
 </section>
 </main>
 
@@ -853,7 +865,7 @@ function initMap(){
       document.getElementById('poiName').focus();
     });
     if(navigator.geolocation){
-      navigator.geolocation.getCurrentPosition(p=>{ if(!tripDest) map.setView([p.coords.latitude,p.coords.longitude],11); },()=>{},{timeout:4000});
+      /* la richiesta di posizione all'avvio parte da init, solo se non c'è una destinazione */
     }
   }catch(e){
     document.getElementById('map').innerHTML =
@@ -868,6 +880,12 @@ function catColor(cat){
 }
 function poiIconOld(p){
   return L.divIcon({className:'', html:'<div style="font-size:26px;line-height:1">'+(p.visited?'✅':'📍')+'</div>', iconSize:[26,26], iconAnchor:[13,26]});
+}
+let dayLine=null, meMarker=null;
+function itNumIcon(p, n){ // cerchio numerato per le tappe del giorno
+  const col = catColor(p.cat);
+  return L.divIcon({className:'', iconSize:[30,30], iconAnchor:[15,15],
+    html:'<div style="width:30px;height:30px;border-radius:50%;background:'+col+';border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);color:#fff;font-weight:bold;font-size:14px;display:flex;align-items:center;justify-content:center">'+n+'</div>'});
 }
 function poiIcon(p){ // goccia colorata per elenco; visitato = sbiadita con ✓
   const col = catColor(p.cat);
@@ -992,16 +1010,21 @@ function renderPois(){
   }
   if(map){
     Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
+    if(dayLine){ map.removeLayer(dayLine); dayLine=null; }
     pois.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng))
         .filter(p=>!mapDayFilter || mapDayFilter.ids.has(String(p.id)))
         .forEach(p=>{
-      markers[p.id] = L.marker([p.lat,p.lng],{icon:poiIcon(p)}).addTo(map)
+      const num = mapDayFilter && mapDayFilter.order ? mapDayFilter.order.get(String(p.id)) : null;
+      markers[p.id] = L.marker([p.lat,p.lng],{icon: num ? itNumIcon(p,num) : poiIcon(p)}).addTo(map)
         .bindPopup('<div style="min-width:170px"><b>'+esc(p.name)+'</b><br><span style="font-size:11px;color:#4A6468">'+esc(p.cat||'')+'</span><br>'+
           '<div style="display:flex;gap:6px;margin-top:8px">'+
           '<button onclick="poiToggleVisited(\''+p.id+'\')" style="flex:1;padding:8px;border:none;border-radius:8px;background:'+(p.visited?'#FBE9E4':'#DCEBE9')+';font-weight:600">'+(p.visited?'↩ Da visitare':'✓ Visitato')+'</button>'+
           '<button onclick="poiShowInList(\''+p.id+'\')" style="padding:8px 10px;border:none;border-radius:8px;background:#DCEBE9">📋</button>'+
           '</div></div>');
     });
+    if(mapDayFilter && mapDayFilter.route && mapDayFilter.route.length>1){
+      dayLine = L.polyline(mapDayFilter.route, {color:'#2E6E6A', weight:3, dashArray:'8 6', opacity:.8}).addTo(map);
+    }
   }
 }
 async function savePois(){ await store.set('pois', pois); fbPush('pois', pois); renderPois(); }
@@ -1533,7 +1556,7 @@ function bgChartSVG(){
   pts.forEach((p,i)=>{ svgA += '<circle cx="'+X(i)+'" cy="'+yA(p.cum)+'" r="2.5" fill="'+(budgetTotal>0&&p.cum>budgetTotal?'#E4573D':'#2E6E6A')+'"/>'; });
   if(budgetTotal>0) svgA += '<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yA(budgetTotal)+'" y2="'+yA(budgetTotal)+'" stroke="#D9A441" stroke-width="1.5" stroke-dasharray="5 4"/>'+
     '<text x="'+(W-padL)+'" y="'+(yA(budgetTotal)-3)+'" text-anchor="end" font-size="8" font-family="monospace" fill="#D9A441">budget</text>';
-  pts.forEach((p,i)=>{ if(lbl(i)) svgA += '<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="#4A6468">'+p.d.slice(8,10)+'/'+p.d.slice(5,7)+'</text>'; });
+  pts.forEach((p,i)=>{ if(lbl(i)){ const anc = i===0?'start':(i===pts.length-1?'end':'middle'); svgA += '<text x="'+X(i)+'" y="'+(H-6)+'" text-anchor="'+anc+'" font-size="8" font-family="monospace" fill="#4A6468">'+p.d.slice(8,10)+'/'+p.d.slice(5,7)+'</text>'; } });
   svgA += '</svg>';
 
   // --- GIORNALIERO: solo il giorno corrente ---
@@ -1569,20 +1592,14 @@ function bgDayByDayHTML(){
   const lbl = i => (pts.length<=7 || i%2===0);
   const mkY = maxY => (v => H-padB - (v/maxY)*(H-padB-padT));
   const xAxis = y => pts.map((p,i)=> lbl(i)?'<text x="'+(padL+i*cw+cw/2)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8" font-family="monospace" fill="#4A6468">'+p.d.slice(8,10)+'/'+p.d.slice(5,7)+'</text>':'').join('');
-  const maxA = Math.max(budgetTotal||0, pts[pts.length-1].cum)*1.1||1, yA=mkY(maxA);
-  let sA='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
-  pts.forEach((p,i)=>{ sA+='<rect x="'+(padL+i*cw+cw*0.16)+'" y="'+yA(p.cum)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yA(p.cum))+'" rx="2" fill="'+(budgetTotal>0&&p.cum>budgetTotal?'#E4573D':'#2E6E6A')+'" opacity="0.9"/>'; });
-  if(budgetTotal>0) sA+='<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yA(budgetTotal)+'" y2="'+yA(budgetTotal)+'" stroke="#D9A441" stroke-width="1.5" stroke-dasharray="5 4"/>';
-  sA+=xAxis()+'</svg>';
   const maxB = Math.max(baseDaily, ...pts.map(p=>p.day))*1.15||1, yB=mkY(maxB);
   let sB='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
   pts.forEach((p,i)=>{ sB+='<rect x="'+(padL+i*cw+cw*0.16)+'" y="'+yB(p.day)+'" width="'+(cw*0.68)+'" height="'+(H-padB-yB(p.day))+'" rx="2" fill="'+(baseDaily>0&&p.day>baseDaily?'#E4573D':'#D9A441')+'" opacity="0.9"/>'; });
   if(baseDaily>0) sB+='<line x1="'+padL+'" x2="'+(W-padL)+'" y1="'+yB(baseDaily)+'" y2="'+yB(baseDaily)+'" stroke="#2E6E6A" stroke-width="1.5" stroke-dasharray="5 4"/>';
   sB+=xAxis()+'</svg>';
-  return head+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" class="mt8">'+
-    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">CUMULATO</div>'+sA+'</div>'+
-    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">SPESA PER GIORNO</div>'+sB+'</div></div>'+
-    '<div class="small mt8">Ultimi 14 giorni: barre rosse dove superi il budget.</div></div>';
+  return head+'<div class="mt8">'+
+    '<div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">SPESA PER GIORNO</div>'+sB+'</div>'+
+    '<div class="small mt8">Ultimi 14 giorni, linea del budget medio: barre rosse dove lo superi.</div></div>';
 }
 function bgCatHTML(){
   const byCat = {};
@@ -2691,9 +2708,9 @@ function renderToday(){
         '<div class="s">'+new Date(e.date).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})+(e.place?' · '+esc(e.place):'')+'</div></div>'+
         (e.url?'<a class="lnk" target="_blank" rel="noopener" href="'+esc(e.url)+'">🔗</a>':'')+'</div>').join('')
     : '<div class="small">Nessun evento in programma oggi.</div>';
-  const dayIt = itin.filter(e=>e.date===today).sort((a,b)=>(a.time||'99')<(b.time||'99')?-1:1);
+  const dayIt = itin.filter(e=>e.date===today).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
   if(dayIt.length) h += '<div class="small mt8" style="font-weight:600">🗓 Itinerario di oggi:</div>'+
-    dayIt.map(en=>'<div class="small">'+(en.time?en.time+' · ':'')+esc(itEntryLabel(en))+'</div>').join('');
+    dayIt.map((en,i)=>'<div class="small">'+(i+1)+'. '+(itTimeLabel(en)?itTimeLabel(en)+' · ':'')+esc(itEntryLabel(en))+'</div>').join('');
   const todo = pois.filter(p=>!p.visited).length;
   if(todo) h += '<div class="small mt8">🗺 '+todo+' punt'+(todo===1?'o':'i')+' ancora da visitare sulla mappa.</div>';
   if(weatherHTML) h += '<div class="mt8" style="border-top:1px dashed var(--line);padding-top:8px">'+weatherHTML+'</div>';
@@ -2927,7 +2944,9 @@ function dualClockHTML(){
     const here = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
     const there = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',timeZone:tripTZ});
     if(here===there) return '';
-    return '<div class="small" style="font-family:var(--mono);margin-bottom:8px">🕐 Qui '+here+' · '+esc(tripDest.name)+' '+there+'</div>';
+    const homeTz = (Intl.DateTimeFormat().resolvedOptions().timeZone||'');
+    const homeCity = (homeTz.split('/').pop()||'Qui').replace(/_/g,' ');
+    return '<div class="small" style="font-family:var(--mono);margin-bottom:8px">🕐 '+esc(homeCity)+' '+here+' · '+esc(tripDest.name)+' '+there+'</div>';
   }catch(e){ return ''; }
 }
 
@@ -2984,18 +3003,29 @@ document.getElementById('tilesBtn').addEventListener('click', async ()=>{
 let itin=[], itDateVal=new Date().toISOString().slice(0,10), mapDayFilter=null;
 async function saveItin(){ await store.set('itin', itin); fbPush('itin', itin); renderItin(); renderToday(); }
 function itRefreshPoiSelect(){
-  const sel = document.getElementById('itPoi'); if(!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">— luogo salvato (facoltativo) —</option>';
+  const selC = document.getElementById('itCat'), selP = document.getElementById('itPoi');
+  if(!selC || !selP) return;
+  const curC = selC.value, curP = selP.value;
   const groups={};
   pois.forEach(p=>{ const g=p.cat||'Da visitare'; (groups[g]=groups[g]||[]).push(p); });
-  Object.keys(groups).sort().forEach(g=>{
+  const names = Object.keys(groups).sort();
+  selC.innerHTML = '<option value="">📂 Scegli l\'elenco…</option><option value="*">Tutti gli elenchi</option>'+
+    names.map(g=>'<option value="'+esc(g)+'">'+esc(g)+' ('+groups[g].length+')</option>').join('');
+  selC.value = names.includes(curC)||curC==='*' ? curC : '';
+  const chosen = selC.value;
+  if(!chosen){ selP.innerHTML='<option value="">— luogo (prima scegli l\'elenco) —</option>'; selP.value=''; return; }
+  selP.innerHTML = '<option value="">— luogo (facoltativo) —</option>';
+  const src = chosen==='*' ? names : [chosen];
+  src.forEach(g=>{
     const og=document.createElement('optgroup'); og.label=g;
-    groups[g].sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>og.appendChild(new Option(p.name, p.id)));
-    sel.appendChild(og);
+    (groups[g]||[]).sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>og.appendChild(new Option(p.name, p.id)));
+    selP.appendChild(og);
   });
-  sel.value=cur;
+  selP.value=curP;
 }
+const IT_SLOT = {m:['🌅','08:00'], p:['☀️','14:00'], s:['🌙','19:00']};
+const itSortKey = en => en.time || (IT_SLOT[en.slot]||['','99'])[1];
+const itTimeLabel = en => en.time ? (en.slot?(IT_SLOT[en.slot]||[''])[0]+' ':'')+en.time : (en.slot?(IT_SLOT[en.slot]||[''])[0]:'');
 function itEntryLabel(en){
   if(en.poiId){ const p=pois.find(x=>String(x.id)===String(en.poiId)); return p?p.name:'(luogo eliminato)'; }
   return en.text||'';
@@ -3003,13 +3033,14 @@ function itEntryLabel(en){
 function renderItin(){
   const el = document.getElementById('itList'); if(!el) return;
   document.getElementById('itDate').value = itDateVal;
-  const day = itin.filter(e=>e.date===itDateVal).sort((a,b)=>(a.time||'99')<(b.time||'99')?-1:1);
-  el.innerHTML = day.length ? day.map(en=>
-    '<div class="item"><div style="flex:1;min-width:0"><div class="t">'+(en.time?'<span style="font-family:var(--mono);color:var(--teal)">'+en.time+'</span> · ':'')+esc(itEntryLabel(en))+'</div></div>'+
+  const day = itin.filter(e=>e.date===itDateVal).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
+  el.innerHTML = day.length ? day.map((en,i)=>
+    '<div class="item"><div style="flex:1;min-width:0"><div class="t"><span style="display:inline-block;min-width:20px;height:20px;border-radius:50%;background:var(--teal);color:#fff;text-align:center;font-size:12px;line-height:20px;margin-right:6px">'+(i+1)+'</span>'+(itTimeLabel(en)?'<span style="font-family:var(--mono);color:var(--teal)">'+itTimeLabel(en)+'</span> · ':'')+esc(itEntryLabel(en))+'</div></div>'+
     '<div class="acts">'+(en.poiId?'<button class="icon-btn" data-it-map="'+en.poiId+'">🗺</button>':'')+
     '<button class="icon-btn del" data-it-del="'+en.id+'">✕</button></div></div>'
   ).join('') : '<div class="empty">Giorno libero. Aggiungi tappe qui sotto.</div>';
 }
+document.getElementById('itCat').addEventListener('change', ()=>{ document.getElementById('itPoi').value=''; itRefreshPoiSelect(); });
 document.getElementById('itDate').addEventListener('change', e=>{ if(e.target.value){ itDateVal=e.target.value; renderItin(); } });
 document.getElementById('itPrev').addEventListener('click', ()=>{ itDateVal=new Date(new Date(itDateVal).getTime()-86400000).toISOString().slice(0,10); renderItin(); });
 document.getElementById('itNext').addEventListener('click', ()=>{ itDateVal=new Date(new Date(itDateVal).getTime()+86400000).toISOString().slice(0,10); renderItin(); });
@@ -3017,8 +3048,8 @@ document.getElementById('itAdd').addEventListener('click', async ()=>{
   const poiId = document.getElementById('itPoi').value || null;
   const text = document.getElementById('itText').value.trim();
   if(!poiId && !text) return;
-  itin.push({id:uid(), date:itDateVal, time:document.getElementById('itTime').value||'', poiId, text});
-  document.getElementById('itText').value=''; document.getElementById('itPoi').value=''; document.getElementById('itTime').value='';
+  itin.push({id:uid(), date:itDateVal, time:document.getElementById('itTime').value||'', slot:document.getElementById('itSlot').value||'', poiId, text});
+  document.getElementById('itText').value=''; document.getElementById('itPoi').value=''; document.getElementById('itTime').value=''; document.getElementById('itSlot').value='';
   await saveItin();
 });
 document.getElementById('itList').addEventListener('click', async ev=>{
@@ -3031,16 +3062,29 @@ document.getElementById('itList').addEventListener('click', async ev=>{
   if(removed) showUndo('Tappa «'+itEntryLabel(removed)+'» eliminata', async ()=>{ itin.push(removed); await saveItin(); });
 });
 document.getElementById('itMap').addEventListener('click', ()=>{
-  const ids = new Set(itin.filter(e=>e.date===itDateVal && e.poiId).map(e=>String(e.poiId)));
-  const dayPois = pois.filter(p=>ids.has(String(p.id)) && Number.isFinite(p.lat));
+  const dayEntries = itin.filter(e=>e.date===itDateVal && e.poiId).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
+  const order = new Map(); const route = [];
+  let n = 0;
+  dayEntries.forEach(en=>{
+    const p = pois.find(x=>String(x.id)===String(en.poiId));
+    if(p && Number.isFinite(p.lat) && !order.has(String(p.id))){ n++; order.set(String(p.id), n); route.push([p.lat, p.lng]); }
+  });
+  const ids = new Set(order.keys());
+  const dayPois = pois.filter(p=>ids.has(String(p.id)));
   if(!dayPois.length){ document.getElementById('itList').insertAdjacentHTML('afterbegin','<div class="small">Nessuna tappa con posizione in questo giorno.</div>'); return; }
-  mapDayFilter = {date:itDateVal, ids};
+  mapDayFilter = {date:itDateVal, ids, order, route};
+  if(navigator.geolocation) navigator.geolocation.getCurrentPosition(pos=>{   // il mio pin (solo locale, zero database)
+    if(meMarker && map) map.removeLayer(meMarker);
+    if(map){ meMarker = L.circleMarker([pos.coords.latitude,pos.coords.longitude],{radius:8,color:'#fff',weight:2.5,fillColor:'#2A6FD6',fillOpacity:1}).addTo(map).bindPopup('Tu sei qui'); }
+  },()=>{},{timeout:6000});
   document.querySelector('nav.tabs button[data-view="mappa"]').click();
   const info = document.getElementById('mapFilterInfo');
   info.style.display='block';
   info.innerHTML = '🗓 Mostro solo l\'itinerario del '+new Date(itDateVal).toLocaleDateString('it-IT',{day:'numeric',month:'short'})+' ('+dayPois.length+' tappe) — <a href="#" id="mapFilterOff" style="color:var(--pin)">mostra tutti</a>';
   document.getElementById('mapFilterOff').addEventListener('click', e=>{
-    e.preventDefault(); mapDayFilter=null; info.style.display='none'; renderPois();
+    e.preventDefault(); mapDayFilter=null; info.style.display='none';
+    if(meMarker && map){ map.removeLayer(meMarker); meMarker=null; }
+    renderPois();
   });
   renderPois();
   if(map){
@@ -3116,6 +3160,9 @@ document.getElementById('notes').addEventListener('input',()=>{
       document.getElementById('bgDest').value = tripDest.name;
       document.getElementById('bgDestInfo').textContent = '✓ '+tripDest.name;
       mapCenterOnTrip();
+    }
+    if(!tripDest && map && navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(p=>{ if(!tripDest) map.setView([p.coords.latitude,p.coords.longitude],11); },()=>{},{timeout:4000});
     }
   }
   bgCurSel.value = tripCur; refreshCurToggles();
