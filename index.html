@@ -175,7 +175,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v19</span>
+  <span class="route" style="opacity:.7">v20</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -288,6 +288,8 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div id="map"></div>
   <div class="map-hint">Cerca, oppure tocca la mappa: riconosco il luogo. 📍 da visitare · ✅ visitato</div>
   <div class="small mt8" id="mapFilterInfo" style="display:none"></div>
+  <div class="row mt8"><button class="btn btn-ghost" id="itBuildBtn" style="flex:1">🗓 Componi itinerario toccando i pin</button></div>
+  <div class="small" id="itBuildBar" style="display:none"></div>
   <div class="row mt8"><button class="btn btn-ghost" id="tilesBtn" style="flex:1">📥 Salva questa zona per l'uso offline</button></div>
   <div class="small" id="tilesStatus"></div>
 
@@ -519,6 +521,23 @@ nav.tabs .ic{font-size:23px;line-height:1}
       <button class="btn btn-primary" id="bgDestSet" style="min-width:56px">OK</button>
     </div>
     <div class="small mt8" id="bgDestInfo"></div>
+    <div class="row mt8">
+      <div class="small" style="flex:1">🏠 Casa (primo orologio)</div>
+      <select id="homeTzSel" style="flex:1.4">
+        <option value="Europe/Rome">Roma</option>
+        <option value="Europe/London">Londra</option>
+        <option value="Europe/Paris">Parigi</option>
+        <option value="Europe/Berlin">Berlino</option>
+        <option value="Europe/Madrid">Madrid</option>
+        <option value="America/New_York">New York</option>
+        <option value="America/Los_Angeles">Los Angeles</option>
+        <option value="Asia/Tokyo">Tokyo</option>
+        <option value="Asia/Shanghai">Shanghai</option>
+        <option value="Asia/Dubai">Dubai</option>
+        <option value="Australia/Sydney">Sydney</option>
+        <option value="auto">Automatico (fuso del telefono)</option>
+      </select>
+    </div>
     <div class="small mt8">Regola meteo, doppio orologio e centratura della mappa per tutto il viaggio.</div>
   </div>
 
@@ -573,7 +592,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v19</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v20</div>
 </section>
 </main>
 
@@ -846,6 +865,7 @@ function initMap(){
       maxZoom:19, attribution:'© OpenStreetMap'
     }).addTo(map);
     map.on('click', e=>{
+      if(itBuildMode) return;   // in modalità itinerario si toccano solo i pin
       pendingLatLng = e.latlng;
       document.getElementById('poiCoords').textContent =
         'Posizione: '+e.latlng.lat.toFixed(5)+', '+e.latlng.lng.toFixed(5);
@@ -1011,10 +1031,11 @@ function renderPois(){
   if(map){
     Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
     if(dayLine){ map.removeLayer(dayLine); dayLine=null; }
+    const dayOR = itBuildMode ? itDayOrder(itDateVal) : (mapDayFilter ? {order:mapDayFilter.order, route:mapDayFilter.route} : null);
     pois.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng))
-        .filter(p=>!mapDayFilter || mapDayFilter.ids.has(String(p.id)))
+        .filter(p=>itBuildMode || !mapDayFilter || mapDayFilter.ids.has(String(p.id)))
         .forEach(p=>{
-      const num = mapDayFilter && mapDayFilter.order ? mapDayFilter.order.get(String(p.id)) : null;
+      const num = dayOR ? dayOR.order.get(String(p.id)) : null;
       markers[p.id] = L.marker([p.lat,p.lng],{icon: num ? itNumIcon(p,num) : poiIcon(p)}).addTo(map)
         .bindPopup('<div style="min-width:170px"><b>'+esc(p.name)+'</b><br><span style="font-size:11px;color:#4A6468">'+esc(p.cat||'')+'</span><br>'+
           '<div style="display:flex;gap:6px;margin-top:8px">'+
@@ -1022,8 +1043,14 @@ function renderPois(){
           '<button onclick="poiShowInList(\''+p.id+'\')" style="padding:8px 10px;border:none;border-radius:8px;background:#DCEBE9">📋</button>'+
           '</div></div>');
     });
-    if(mapDayFilter && mapDayFilter.route && mapDayFilter.route.length>1){
-      dayLine = L.polyline(mapDayFilter.route, {color:'#2E6E6A', weight:3, dashArray:'8 6', opacity:.8}).addTo(map);
+    if(itBuildMode){
+      Object.entries(markers).forEach(([id,mk])=>{
+        mk.unbindPopup();
+        mk.on('click', ()=>itBuildTap(id));
+      });
+    }
+    if(dayOR && dayOR.route.length>1){
+      dayLine = L.polyline(dayOR.route, {color:'#2E6E6A', weight:3, dashArray:'8 6', opacity:.8}).addTo(map);
     }
   }
 }
@@ -2937,18 +2964,23 @@ document.getElementById('poiNearBtn').addEventListener('click', function(){
 });
 
 /* ============ DOPPIO OROLOGIO (fuso della destinazione) ============ */
-let tripTZ = null;
+let tripTZ = null, homeTz = 'Europe/Rome';
 function dualClockHTML(){
   if(!tripTZ || !tripDest) return '';
   try{
-    const here = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+    const sysTz = (Intl.DateTimeFormat().resolvedOptions().timeZone||'');
+    const tzHome = homeTz==='auto' ? sysTz : homeTz;
+    if(tzHome===tripTZ) return '';                       // stesso fuso: niente doppio orologio
+    const here = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',timeZone:tzHome});
     const there = new Date().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',timeZone:tripTZ});
-    if(here===there) return '';
-    const homeTz = (Intl.DateTimeFormat().resolvedOptions().timeZone||'');
-    const homeCity = (homeTz.split('/').pop()||'Qui').replace(/_/g,' ');
+    const sel = document.getElementById('homeTzSel');
+    const homeCity = homeTz==='auto'
+      ? (sysTz.split('/').pop()||'Casa').replace(/_/g,' ')
+      : (sel && sel.selectedIndex>=0 ? sel.options[sel.selectedIndex].text : 'Casa');
     return '<div class="small" style="font-family:var(--mono);margin-bottom:8px">🕐 '+esc(homeCity)+' '+here+' · '+esc(tripDest.name)+' '+there+'</div>';
   }catch(e){ return ''; }
 }
+
 
 /* ============ EVENTO → CALENDARIO DEL TELEFONO (.ics) ============ */
 function icsDownload(e){
@@ -3000,7 +3032,17 @@ document.getElementById('tilesBtn').addEventListener('click', async ()=>{
 });
 
 /* ============ ITINERARIO PER GIORNI (condiviso col gruppo) ============ */
-let itin=[], itDateVal=new Date().toISOString().slice(0,10), mapDayFilter=null;
+let itin=[], itDateVal=new Date().toISOString().slice(0,10), mapDayFilter=null, itBuildMode=false, itEditId=null;
+function itDayOrder(date){
+  const entries = itin.filter(e=>e.date===date && e.poiId).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
+  const order = new Map(), route = [];
+  let n = 0;
+  entries.forEach(en=>{
+    const p = pois.find(x=>String(x.id)===String(en.poiId));
+    if(p && Number.isFinite(p.lat) && !order.has(String(p.id))){ n++; order.set(String(p.id), n); route.push([p.lat, p.lng]); }
+  });
+  return {order, route};
+}
 async function saveItin(){ await store.set('itin', itin); fbPush('itin', itin); renderItin(); renderToday(); }
 function itRefreshPoiSelect(){
   const selC = document.getElementById('itCat'), selP = document.getElementById('itPoi');
@@ -3034,11 +3076,21 @@ function renderItin(){
   const el = document.getElementById('itList'); if(!el) return;
   document.getElementById('itDate').value = itDateVal;
   const day = itin.filter(e=>e.date===itDateVal).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
-  el.innerHTML = day.length ? day.map((en,i)=>
-    '<div class="item"><div style="flex:1;min-width:0"><div class="t"><span style="display:inline-block;min-width:20px;height:20px;border-radius:50%;background:var(--teal);color:#fff;text-align:center;font-size:12px;line-height:20px;margin-right:6px">'+(i+1)+'</span>'+(itTimeLabel(en)?'<span style="font-family:var(--mono);color:var(--teal)">'+itTimeLabel(en)+'</span> · ':'')+esc(itEntryLabel(en))+'</div></div>'+
+  el.innerHTML = day.length ? day.map((en,i)=>{
+    if(String(en.id)===String(itEditId)){
+      const so = v => ' '+(en.slot===v?'selected':'');
+      return '<div class="item"><div class="row" style="flex:1;min-width:0">'+
+        '<select id="itEditSlot" style="max-width:120px"><option value="">fascia…</option>'+
+        '<option value="m"'+so('m')+'>🌅 Mattina</option><option value="p"'+so('p')+'>☀️ Pomeriggio</option><option value="s"'+so('s')+'>🌙 Sera</option></select>'+
+        '<input type="time" id="itEditTime" value="'+(en.time||'')+'" style="flex:1;min-width:90px"></div>'+
+        '<div class="acts"><button class="icon-btn" data-it-save="'+en.id+'" title="Salva">✓</button>'+
+        '<button class="icon-btn" data-it-cancel="1" title="Annulla">✕</button></div></div>';
+    }
+    return '<div class="item"><div style="flex:1;min-width:0"><div class="t"><span style="display:inline-block;min-width:20px;height:20px;border-radius:50%;background:var(--teal);color:#fff;text-align:center;font-size:12px;line-height:20px;margin-right:6px">'+(i+1)+'</span>'+(itTimeLabel(en)?'<span style="font-family:var(--mono);color:var(--teal)">'+itTimeLabel(en)+'</span> · ':'')+esc(itEntryLabel(en))+'</div></div>'+
     '<div class="acts">'+(en.poiId?'<button class="icon-btn" data-it-map="'+en.poiId+'">🗺</button>':'')+
-    '<button class="icon-btn del" data-it-del="'+en.id+'">✕</button></div></div>'
-  ).join('') : '<div class="empty">Giorno libero. Aggiungi tappe qui sotto.</div>';
+    '<button class="icon-btn" data-it-edit="'+en.id+'" title="Orario / fascia">✎</button>'+
+    '<button class="icon-btn del" data-it-del="'+en.id+'">✕</button></div></div>';
+  }).join('') : '<div class="empty">Giorno libero. Aggiungi tappe qui sotto.</div>';
 }
 document.getElementById('itCat').addEventListener('change', ()=>{ document.getElementById('itPoi').value=''; itRefreshPoiSelect(); });
 document.getElementById('itDate').addEventListener('change', e=>{ if(e.target.value){ itDateVal=e.target.value; renderItin(); } });
@@ -3053,6 +3105,18 @@ document.getElementById('itAdd').addEventListener('click', async ()=>{
   await saveItin();
 });
 document.getElementById('itList').addEventListener('click', async ev=>{
+  const ed = ev.target.closest('[data-it-edit]');
+  if(ed){ itEditId = ed.dataset.itEdit; renderItin(); return; }
+  const cn = ev.target.closest('[data-it-cancel]');
+  if(cn){ itEditId = null; renderItin(); return; }
+  const sv = ev.target.closest('[data-it-save]');
+  if(sv){
+    const en = itin.find(x=>String(x.id)===String(sv.dataset.itSave));
+    if(en){ en.slot = document.getElementById('itEditSlot').value||''; en.time = document.getElementById('itEditTime').value||''; }
+    itEditId = null;
+    await saveItin();
+    return;
+  }
   const gm = ev.target.closest('[data-it-map]');
   if(gm){ document.querySelector('nav.tabs button[data-view="mappa"]').click(); poiGoToMap(gm.dataset.itMap); return; }
   const del = ev.target.closest('[data-it-del]'); if(!del) return;
@@ -3061,6 +3125,40 @@ document.getElementById('itList').addEventListener('click', async ev=>{
   await saveItin();
   if(removed) showUndo('Tappa «'+itEntryLabel(removed)+'» eliminata', async ()=>{ itin.push(removed); await saveItin(); });
 });
+async function itBuildTap(poiId){
+  const existing = itin.filter(e=>e.date===itDateVal && String(e.poiId)===String(poiId));
+  if(existing.length) itin = itin.filter(e=>!(e.date===itDateVal && String(e.poiId)===String(poiId)));
+  else itin.push({id:uid(), date:itDateVal, time:'', slot:'', poiId, text:''});
+  await saveItin();
+  itBuildBarRender();
+  renderPois();
+}
+function itBuildBarRender(){
+  const bar = document.getElementById('itBuildBar');
+  if(!itBuildMode){ bar.style.display='none'; return; }
+  const n = itDayOrder(itDateVal).order.size;
+  bar.style.display='block';
+  bar.innerHTML = '<div class="row" style="align-items:center">'+
+    '<button class="icon-btn" id="itbPrev">◀</button>'+
+    '<b style="flex:1;text-align:center">'+new Date(itDateVal).toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'})+' · '+n+' tappe</b>'+
+    '<button class="icon-btn" id="itbNext">▶</button>'+
+    '<button class="btn btn-primary" id="itbDone" style="min-width:64px">Fine</button></div>'+
+    '<div class="small mt8">Tocca un pin per aggiungerlo come tappa (in sequenza); ritoccalo per toglierlo. Orari e fasce si impostano poi in Eventi → Itinerario.</div>';
+  document.getElementById('itbPrev').addEventListener('click', ()=>{ itDateVal=new Date(new Date(itDateVal).getTime()-86400000).toISOString().slice(0,10); renderItin(); itBuildBarRender(); renderPois(); });
+  document.getElementById('itbNext').addEventListener('click', ()=>{ itDateVal=new Date(new Date(itDateVal).getTime()+86400000).toISOString().slice(0,10); renderItin(); itBuildBarRender(); renderPois(); });
+  document.getElementById('itbDone').addEventListener('click', ()=>itBuildToggle(false));
+}
+function itBuildToggle(on){
+  itBuildMode = on;
+  const btn = document.getElementById('itBuildBtn');
+  btn.style.background = on ? 'var(--teal)' : '';
+  btn.style.color = on ? '#fff' : '';
+  if(on){ mapDayFilter=null; document.getElementById('mapFilterInfo').style.display='none'; }
+  itBuildBarRender();
+  renderPois();
+}
+document.getElementById('itBuildBtn').addEventListener('click', ()=>itBuildToggle(!itBuildMode));
+
 document.getElementById('itMap').addEventListener('click', ()=>{
   const dayEntries = itin.filter(e=>e.date===itDateVal && e.poiId).sort((a,b)=>itSortKey(a)<itSortKey(b)?-1:1);
   const order = new Map(); const route = [];
@@ -3137,7 +3235,6 @@ document.getElementById('notes').addEventListener('input',()=>{
   document.getElementById('themeSel').value = theme;
   applyTheme(theme);
   await tripsInit();
-  loadWeather();
   renderToday();
   try{ docIdb = await idbOpen(); }catch(e){ docIdb = null; }
   docTree = (await store.get('docTree')) || [];
@@ -3165,8 +3262,12 @@ document.getElementById('notes').addEventListener('input',()=>{
       navigator.geolocation.getCurrentPosition(p=>{ if(!tripDest) map.setView([p.coords.latitude,p.coords.longitude],11); },()=>{},{timeout:4000});
     }
   }
+  loadWeather();   // ora la destinazione è caricata: il meteo appare da solo
   bgCurSel.value = tripCur; refreshCurToggles();
   document.getElementById('bgDate').value = new Date().toISOString().slice(0,10);
+  homeTz = (await store.get('homeTz')) || 'Europe/Rome';
+  document.getElementById('homeTzSel').value = homeTz;
+  document.getElementById('homeTzSel').addEventListener('change', async e=>{ homeTz=e.target.value; await store.set('homeTz', homeTz); renderToday(); });
   userName = (await store.get('userName')) || '';
   if(userName) document.getElementById('fbName').value = userName;
   renderBudget();
