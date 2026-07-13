@@ -96,6 +96,8 @@ nav.tabs .ic{font-size:23px;line-height:1}
 .dnode{user-select:none;-webkit-user-select:none}
 .dnode.dragsrc{opacity:.35}
 .dnode.droptgt{outline:2px solid var(--teal);background:var(--teal-soft)}
+.drop-above{box-shadow:0 -3px 0 0 var(--teal) !important}
+.drop-below{box-shadow:0 3px 0 0 var(--teal) !important}
 .item.flash{animation:flashbg 1.6s ease}
 @keyframes flashbg{0%,60%{background:var(--teal-soft)}100%{background:transparent}}
 #dragGhost{position:fixed;z-index:950;pointer-events:none;opacity:.9;background:#fff;
@@ -175,7 +177,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v22</span>
+  <span class="route" style="opacity:.7">v23</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -595,7 +597,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v22</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v23</div>
 </section>
 </main>
 
@@ -2559,6 +2561,7 @@ document.addEventListener('pointermove', e=>{
   }
   drag.ghost.style.left = (e.clientX+8)+'px';
   drag.ghost.style.top = (e.clientY-44)+'px';
+  dragAutoScroll(e.clientY);
   document.querySelectorAll('.droptgt').forEach(el=>el.classList.remove('droptgt'));
   drag.tgt = null;
   const under = document.elementFromPoint(e.clientX, e.clientY);
@@ -2574,6 +2577,7 @@ document.addEventListener('pointermove', e=>{
   }
 });
 document.addEventListener('pointerup', async ()=>{
+  dragAutoScrollStop();
   if(drag.active){
     dragEndedAt = Date.now();   // il click successivo va ignorato
     if(drag.tgt){
@@ -3187,12 +3191,26 @@ function itBuildToggle(on){
     mapDayFilter=null; document.getElementById('mapFilterInfo').style.display='none';
     const ey = document.querySelector('[data-coll="itin"]');           // elenco tappe visibile in tempo reale
     if(ey){ collState['itin']=true; collApply(ey, true); store.set('collapsed', collState); }
-    renderItin();
   }
+  renderItin();          // le righe cambiano faccia subito, in entrambe le direzioni
   itBuildBarRender();
   renderPois();
 }
 document.getElementById('itBuildBtn').addEventListener('click', ()=>itBuildToggle(!itBuildMode));
+
+/* autoscroll durante qualsiasi trascinamento: avvicinati al bordo e la pagina scorre */
+let dragScrollY = null, dragScrollTimer = null;
+function dragAutoScroll(y){
+  dragScrollY = y;
+  if(dragScrollTimer) return;
+  dragScrollTimer = setInterval(()=>{
+    if(dragScrollY===null){ clearInterval(dragScrollTimer); dragScrollTimer=null; return; }
+    const margin = 110, speed = 16;
+    if(dragScrollY < margin) window.scrollBy(0, -speed);
+    else if(dragScrollY > window.innerHeight - margin) window.scrollBy(0, speed);
+  }, 16);
+}
+function dragAutoScrollStop(){ dragScrollY = null; }
 
 /* trascina ⠿ per riordinare le tappe del giorno */
 let itDrag = null;
@@ -3223,14 +3241,19 @@ function itPointRow(x,y){
 function itDragMove(x,y){
   const g = itGhost();
   g.style.left = (x+10)+'px'; g.style.top = (y-14)+'px';
-  document.querySelectorAll('#itList .droptgt').forEach(r=>r.classList.remove('droptgt'));
+  dragAutoScroll(y);
+  document.querySelectorAll('#itList .drop-above,#itList .drop-below').forEach(r=>r.classList.remove('drop-above','drop-below'));
   const row = itPointRow(x,y);
-  if(row && row.dataset.itRow!==String(itDrag)) row.classList.add('droptgt');
+  if(row && row.dataset.itRow!==String(itDrag)){
+    const r = row.getBoundingClientRect();
+    row.classList.add(y < r.top + r.height/2 ? 'drop-above' : 'drop-below');   // la linea dice dove finirà
+  }
 }
 function itDragEnd(x,y){
   const g = itGhost();
   g.style.display='none';
-  document.querySelectorAll('#itList .droptgt').forEach(r=>r.classList.remove('droptgt'));
+  dragAutoScrollStop();
+  document.querySelectorAll('#itList .drop-above,#itList .drop-below').forEach(r=>r.classList.remove('drop-above','drop-below'));
   const row = itPointRow(x,y);
   if(row && row.dataset.itRow!==String(itDrag)){
     const r = row.getBoundingClientRect();
