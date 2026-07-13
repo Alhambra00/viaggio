@@ -1,7 +1,7 @@
 /* Service worker — Compagno di Viaggio
    Strategia: l'app funziona offline; quando c'è rete, la pagina si aggiorna da GitHub.
    Per pubblicare una nuova versione dell'app basta cambiare VERSION qui sotto. */
-const VERSION = 'v20';
+const VERSION = 'v21';
 const SHELL = 'viaggio-shell-' + VERSION;
 const RUNTIME = 'viaggio-runtime';
 const PRECACHE = [

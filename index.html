@@ -175,7 +175,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v20</span>
+  <span class="route" style="opacity:.7">v21</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -247,6 +247,24 @@ nav.tabs .ic{font-size:23px;line-height:1}
     <button class="btn btn-ghost mt8" id="evCancelEdit" style="width:100%;display:none">Annulla modifica</button>
   </div>
 
+  <div class="eyebrow coll" data-coll="evlist">🗂 Tutti gli eventi</div>
+  <div class="card" id="evList"></div>
+</section>
+
+<!-- ================= MAPPA ================= -->
+<section class="view" id="view-mappa">
+  <div class="eyebrow">🔍 Cerca e aggiungi luoghi</div>
+  <div class="row" style="margin-bottom:8px">
+    <input id="mapSearch" placeholder="Cerca luogo o indirizzo (es. Via Roma 12, Torino)" enterkeyhint="search" autocomplete="off">
+    <button class="btn btn-primary" id="mapSearchBtn" style="min-width:52px">🔍</button>
+  </div>
+  <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
+  <div id="map"></div>
+  <div class="map-hint">Cerca, oppure tocca la mappa: riconosco il luogo. 📍 da visitare · ✅ visitato</div>
+  <div class="small mt8" id="mapFilterInfo" style="display:none"></div>
+  <div class="row mt8"><button class="btn btn-ghost" id="itBuildBtn" style="flex:1">🗓 Componi itinerario toccando i pin</button></div>
+  <div class="small" id="itBuildBar" style="display:none"></div>
+
   <div class="eyebrow coll" data-coll="itin">🗓 Itinerario per giorni</div>
   <div class="card">
     <div class="row">
@@ -273,23 +291,6 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
   </div>
 
-  <div class="eyebrow coll" data-coll="evlist">🗂 Tutti gli eventi</div>
-  <div class="card" id="evList"></div>
-</section>
-
-<!-- ================= MAPPA ================= -->
-<section class="view" id="view-mappa">
-  <div class="eyebrow">🔍 Cerca e aggiungi luoghi</div>
-  <div class="row" style="margin-bottom:8px">
-    <input id="mapSearch" placeholder="Cerca luogo o indirizzo (es. Via Roma 12, Torino)" enterkeyhint="search" autocomplete="off">
-    <button class="btn btn-primary" id="mapSearchBtn" style="min-width:52px">🔍</button>
-  </div>
-  <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
-  <div id="map"></div>
-  <div class="map-hint">Cerca, oppure tocca la mappa: riconosco il luogo. 📍 da visitare · ✅ visitato</div>
-  <div class="small mt8" id="mapFilterInfo" style="display:none"></div>
-  <div class="row mt8"><button class="btn btn-ghost" id="itBuildBtn" style="flex:1">🗓 Componi itinerario toccando i pin</button></div>
-  <div class="small" id="itBuildBar" style="display:none"></div>
   <div class="row mt8"><button class="btn btn-ghost" id="tilesBtn" style="flex:1">📥 Salva questa zona per l'uso offline</button></div>
   <div class="small" id="tilesStatus"></div>
 
@@ -592,7 +593,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v20</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v21</div>
 </section>
 </main>
 
@@ -3153,7 +3154,12 @@ function itBuildToggle(on){
   const btn = document.getElementById('itBuildBtn');
   btn.style.background = on ? 'var(--teal)' : '';
   btn.style.color = on ? '#fff' : '';
-  if(on){ mapDayFilter=null; document.getElementById('mapFilterInfo').style.display='none'; }
+  if(on){
+    mapDayFilter=null; document.getElementById('mapFilterInfo').style.display='none';
+    const ey = document.querySelector('[data-coll="itin"]');           // elenco tappe visibile in tempo reale
+    if(ey){ collState['itin']=true; collApply(ey, true); store.set('collapsed', collState); }
+    renderItin();
+  }
   itBuildBarRender();
   renderPois();
 }
