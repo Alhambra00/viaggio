@@ -177,7 +177,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v23</span>
+  <span class="route" style="opacity:.7">v24</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -385,6 +385,14 @@ nav.tabs .ic{font-size:23px;line-height:1}
       <div class="small mt8" id="bgWithCount"></div>
       <div class="small" id="bgSplitInfo">Sul tuo budget peserà solo la tua quota. Gli altri vedranno il proprio debito in Home e nel Budget, e tu dovrai confermare i pagamenti ricevuti.</div>
     </div>
+    <label class="row mt8" style="font-size:13px;color:var(--ink-soft)">
+      <input type="checkbox" id="bgSpread" style="width:18px;height:18px;accent-color:var(--teal)"> Distribuisci su più giorni (abbonamenti, pass…)
+    </label>
+    <div class="row mt8" id="bgSpreadRow" style="display:none">
+      <div class="small" style="flex:1">Su quanti giorni? (dal giorno della spesa)</div>
+      <input type="number" id="bgSpreadN" inputmode="numeric" min="1" value="7" style="max-width:80px">
+    </div>
+    <div class="small mt8" id="bgSpreadInfo" style="display:none"></div>
     <button class="btn btn-primary mt8" id="bgAdd" style="width:100%">+ Registra spesa</button>
     <button class="btn btn-ghost mt8" id="bgCancelEdit" style="width:100%;display:none">Annulla modifica</button>
   </div>
@@ -597,7 +605,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v23</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v24</div>
 </section>
 </main>
 
@@ -1451,10 +1459,14 @@ async function fbConnect(cfgText, room, silent){
         const note = (g.note ? g.note+' · ' : '')+'pagata da '+(g.by||'?');
         const l = expenses.find(x=>x.id===qid);
         if(!l){
-          expenses.push({id:qid, fromGroup:String(g.id), amt:q, cat:g.cat, note, date:g.date, by:userName||'Io', byId:deviceId, shared:false});
+          const qe = {id:qid, fromGroup:String(g.id), amt:q, cat:g.cat, note, date:g.date, by:userName||'Io', byId:deviceId, shared:false};
+          if(g.spread>1) qe.spread = g.spread;   // anche la mia quota si spalma come la spesa originale
+          expenses.push(qe);
           touched = true;
-        }else if(l.amt!==q || l.cat!==g.cat || l.date!==g.date || l.note!==note){
-          l.amt=q; l.cat=g.cat; l.date=g.date; l.note=note; touched = true;
+        }else if(l.amt!==q || l.cat!==g.cat || l.date!==g.date || l.note!==note || (l.spread||1)!==(g.spread||1)){
+          l.amt=q; l.cat=g.cat; l.date=g.date; l.note=note;
+          if(g.spread>1) l.spread=g.spread; else delete l.spread;
+          touched = true;
         }
       });
       /* tolgo le quote di spese cancellate o da cui il pagatore mi ha rimosso */
@@ -1534,6 +1546,20 @@ const expParts = e => (e.sharedWith && typeof e.sharedWith==='object' && Object.
   : Math.max(1, e.split||1);
 /* quota personale: importo ÷ partecipanti (le spese di gruppo pesano sul TUO budget solo per la tua parte) */
 const expShare = e => e.amt / expParts(e);
+/* spesa distribuita: la quota personale si spalma su e.spread giorni consecutivi dal giorno della spesa */
+const expSpread = e => Math.max(1, e.spread||1);
+function expOnDay(e, dayStr){                    // fetta che cade in quel giorno
+  const n = expSpread(e), d0 = e.date.slice(0,10);
+  if(n===1) return d0===dayStr ? expShare(e) : 0;
+  const idx = Math.round((new Date(dayStr) - new Date(d0))/86400000);
+  return (idx>=0 && idx<n) ? expShare(e)/n : 0;
+}
+function expUpToDay(e, dayStr){                  // fette nei giorni PRIMA di quel giorno
+  const n = expSpread(e), d0 = e.date.slice(0,10);
+  if(n===1) return d0 < dayStr ? expShare(e) : 0;
+  const idx = Math.floor((new Date(dayStr) - new Date(d0))/86400000);
+  return expShare(e)/n * Math.max(0, Math.min(n, idx));
+}
 function addExpense(rawAmt, mode, cat, note, shared, dateStr, withList){
   let amtEur = rawAmt, orig = null;
   if(mode==='trip' && tripCur!=='EUR'){
@@ -1548,6 +1574,8 @@ function addExpense(rawAmt, mode, cat, note, shared, dateStr, withList){
   if(shared) (withList||[]).forEach(m=>{ if(m && m.id) sharedWith[m.id] = {name:m.name||'?', paid:false, confirmed:false}; });
   const e = {id:uid(), amt:amtEur, orig, cat, note:note||'', date, by:userName||'Io', byId:deviceId, shared:!!shared,
     sharedWith: (shared && Object.keys(sharedWith).length) ? sharedWith : null};
+  const spN = bgSpreadN();
+  if(spN>1) e.spread = spN;
   expenses.push(e);
   if(shared && fb.on){ try{ R('spese/'+e.id).set(e); }catch(err){} }
   saveBudget();
@@ -1555,8 +1583,14 @@ function addExpense(rawAmt, mode, cat, note, shared, dateStr, withList){
 }
 function bgSeries(){
   const byDay = {};
+  const today = new Date().toISOString().slice(0,10);
   [...expenses].sort((a,b)=>a.date<b.date?-1:1).forEach(e=>{
-    const d = e.date.slice(0,10); byDay[d] = (byDay[d]||0) + expShare(e);
+    const n = expSpread(e), d0 = new Date(e.date.slice(0,10));
+    for(let k=0;k<n;k++){
+      const d = new Date(d0.getTime()+k*86400000).toISOString().slice(0,10);
+      if(d>today) break;                          // le fette future non entrano nei grafici (per ora)
+      byDay[d] = (byDay[d]||0) + expShare(e)/n;
+    }
   });
   const days = Object.keys(byDay).sort();
   const show = days.slice(-14);
@@ -1567,8 +1601,8 @@ function bgAdaptiveDaily(){
   const daysN = tripDays();
   if(!(budgetTotal>0 && daysN>0)) return 0;
   const today = new Date().toISOString().slice(0,10);
-  const spentToday = expenses.filter(e=>e.date.slice(0,10)===today).reduce((s,e)=>s+expShare(e),0);
-  const spentBefore = expenses.reduce((s,e)=>s+expShare(e),0) - spentToday;
+  const spentToday = expenses.reduce((s,e)=>s+expOnDay(e,today),0);
+  const spentBefore = expenses.reduce((s,e)=>s+expUpToDay(e,today),0);
   let remDays;
   if(today < tripStart) remDays = daysN;
   else if(today > tripEnd) return 0;
@@ -1599,7 +1633,7 @@ function bgChartSVG(){
 
   // --- GIORNALIERO: solo il giorno corrente ---
   const todayStr = new Date().toISOString().slice(0,10);
-  const spentToday = expenses.filter(e=>e.date.slice(0,10)===todayStr).reduce((s,e)=>s+expShare(e),0);
+  const spentToday = expenses.reduce((s,e)=>s+expOnDay(e,todayStr),0);
   const daily = bgAdaptiveDaily();
   const maxB = Math.max(daily, spentToday) * 1.2 || 1;
   const yB = mkY(maxB);
@@ -1673,8 +1707,8 @@ function renderBudget(){
   const dEl = document.getElementById('bgDaily');
   const days = tripDays();
   const today = new Date().toISOString().slice(0,10);
-  const spentToday = expenses.filter(e=>e.date.slice(0,10)===today).reduce((s,e)=>s+expShare(e),0);
-  const spentBefore = spent - spentToday;
+  const spentToday = expenses.reduce((s,e)=>s+expOnDay(e,today),0);
+  const spentBefore = expenses.reduce((s,e)=>s+expUpToDay(e,today),0);
   let dailyLine = '';
   if(budgetTotal>0 && days>0){
     let remDays;
@@ -1723,9 +1757,11 @@ function renderBudget(){
       const nSplit = expParts(e);
       const full = e.orig ? fmtCur(e.orig.amt, e.orig.cur)+' (≈ '+eur(e.amt)+')' : both(e.amt);
       const shown = nSplit>1 ? both(expShare(e)) : full;
-      const badge = e.fromGroup ? ' <span class="badge">quota gruppo</span>'
-        : (e.shared ? ' <span class="badge">gruppo'+(nSplit>1?' ÷'+nSplit:'')+'</span>' : '');
-      const paidNote = nSplit>1 ? ' · pagati '+full+' per '+nSplit+' persone' : '';
+      const badge = (e.fromGroup ? ' <span class="badge">quota gruppo</span>'
+        : (e.shared ? ' <span class="badge">gruppo'+(nSplit>1?' ÷'+nSplit:'')+'</span>' : ''))
+        + (expSpread(e)>1 ? ' <span class="badge">⏳ '+e.spread+' gg</span>' : '');
+      const paidNote = (nSplit>1 ? ' · pagati '+full+' per '+nSplit+' persone' : '')
+        + (expSpread(e)>1 ? ' · '+eur(expShare(e)/e.spread)+'/giorno' : '');
       const acts = e.fromGroup ? '<div class="acts" title="Gestita da chi ha pagato">🔒</div>'
         : '<div class="acts"><button class="icon-btn" data-edit-bg="'+e.id+'" title="Modifica">✎</button>'+
           '<button class="icon-btn del" data-del-bg="'+e.id+'" title="Elimina">✕</button></div>';
@@ -1964,6 +2000,29 @@ function bgWithCount(){
 document.getElementById('bgShared').addEventListener('change', ()=>bgWithUI(null));
 document.getElementById('bgWithList').addEventListener('change', bgWithCount);
 document.getElementById('bgAmt').addEventListener('input', ()=>{ if(document.getElementById('bgWithBox').style.display!=='none') bgWithCount(); });
+function bgSpreadN(){
+  if(!document.getElementById('bgSpread').checked) return 1;
+  const n = parseInt(document.getElementById('bgSpreadN').value);
+  return (isNaN(n)||n<1) ? 1 : n;
+}
+function bgSpreadInfoRender(){
+  const on = document.getElementById('bgSpread').checked;
+  document.getElementById('bgSpreadRow').style.display = on ? 'flex' : 'none';
+  const info = document.getElementById('bgSpreadInfo');
+  info.style.display = on ? 'block' : 'none';
+  if(!on) return;
+  const n = bgSpreadN();
+  const amt = parseFloat(document.getElementById('bgAmt').value);
+  const daysN = tripDays();
+  let txt = isNaN(amt)||amt<=0 ? n+' giorni: sul budget peserà ¹⁄'+n+' al giorno.' 
+    : n+' giorni: '+eur(amt/n)+' al giorno sul budget, dal giorno della spesa.';
+  if(daysN>0 && n>daysN) txt += ' ⚠️ Supera i giorni del viaggio ('+daysN+'): va bene comunque, le fette oltre il rientro non pesano sui giorni di viaggio.';
+  info.textContent = txt;
+}
+document.getElementById('bgSpread').addEventListener('change', bgSpreadInfoRender);
+document.getElementById('bgSpreadN').addEventListener('input', bgSpreadInfoRender);
+document.getElementById('bgAmt').addEventListener('input', ()=>{ if(document.getElementById('bgSpread').checked) bgSpreadInfoRender(); });
+
 document.getElementById('bgAdd').addEventListener('click', ()=>{
   const amt = parseFloat(document.getElementById('bgAmt').value);
   if(isNaN(amt) || amt<=0) return;
@@ -1984,6 +2043,8 @@ document.getElementById('bgAdd').addEventListener('click', ()=>{
       e.cat = document.getElementById('bgCat').value;
       e.note = document.getElementById('bgNote').value.trim();
       e.shared = document.getElementById('bgShared').checked;
+      const spN = bgSpreadN();
+      if(spN>1) e.spread = spN; else delete e.spread;
       if(e.shared){
         const remote = groupExpenses.find(x=>String(x.id)===String(e.id));   /* stato più fresco dei pagamenti */
         const old = (remote && remote.sharedWith) || e.sharedWith || {};
@@ -2025,6 +2086,9 @@ function expResetForm(){
   editingExpId = null;
   document.getElementById('bgAmt').value=''; document.getElementById('bgNote').value='';
   document.getElementById('bgShared').checked=false;
+  document.getElementById('bgSpread').checked=false;
+  document.getElementById('bgSpreadN').value=7;
+  bgSpreadInfoRender();
   bgWithUI(null);
   document.getElementById('bgDate').value = new Date().toISOString().slice(0,10);
   document.getElementById('bgAdd').textContent = '+ Registra spesa';
@@ -2044,6 +2108,9 @@ document.getElementById('bgList').addEventListener('click', async ev=>{
     document.getElementById('bgDate').value = e.date.slice(0,10);
     document.getElementById('bgShared').checked = !!e.shared;
     bgWithUI(e.sharedWith ? new Set(Object.keys(e.sharedWith)) : null);
+    document.getElementById('bgSpread').checked = expSpread(e)>1;
+    if(expSpread(e)>1) document.getElementById('bgSpreadN').value = e.spread;
+    bgSpreadInfoRender();
     document.getElementById('bgAdd').textContent = '💾 Salva modifiche';
     document.getElementById('bgCancelEdit').style.display = 'block';
     document.getElementById('bgAmt').scrollIntoView({behavior:'smooth', block:'center'});
@@ -2915,11 +2982,13 @@ function bgDayCatHTML(){
     '<div id="dayCatToggle" style="cursor:pointer;padding:8px 0;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)">'+
     '<span style="color:var(--teal)">'+(dayCatOpen?'▾':'▸')+'</span> Spese del giorno per categoria</div>';
   if(!dayCatOpen) return head+'</div>';
-  const dEx = expenses.filter(e=>e.date.slice(0,10)===dayCatDate);
   const byCat = {};
-  dEx.forEach(e=>{ byCat[e.cat] = (byCat[e.cat]||0) + expShare(e); });
+  let tot = 0;
+  expenses.forEach(e=>{
+    const v = expOnDay(e, dayCatDate);
+    if(v>0){ byCat[e.cat] = (byCat[e.cat]||0) + v; tot += v; }
+  });
   const cats = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-  const tot = dEx.reduce((s,e)=>s+expShare(e),0);
   let body = '<div class="row" style="margin-top:14px"><input type="date" id="dayCatDate" value="'+dayCatDate+'" style="flex:1">'+
     '<button class="btn btn-ghost" id="dayCatToday" style="min-width:60px">Oggi</button></div>';
   if(!cats.length) body += '<div class="empty mt8">Nessuna spesa in questo giorno.</div>';
