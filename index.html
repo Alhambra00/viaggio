@@ -177,7 +177,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <header class="app">
   <h1>Compagno di Viaggio</h1>
   <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v24</span>
+  <span class="route" style="opacity:.7">v25</span>
   <span class="live" id="liveBadge">● LIVE</span>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:18px;color:#9CC6C9;margin-left:6px;cursor:pointer">⚙️</button>
 </header>
@@ -605,7 +605,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v24</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v25</div>
 </section>
 </main>
 
@@ -1952,6 +1952,7 @@ function curToggle(btnId, inputId){
     }
     b.dataset.mode = newMode;
     b.textContent = newMode==='eur' ? 'EUR' : tripCur;
+    if(btnId==='bgAmtCur'){ bgWithCount(); }   // anteprime quota+distribuzione nella valuta giusta
   });
 }
 curToggle('qAmtCur','qAmt'); curToggle('bgAmtCur','bgAmt');
@@ -1991,13 +1992,25 @@ function bgWithRefresh(){   /* i membri della stanza sono cambiati: ridisegno pr
 function bgWithSelected(){
   return [...document.querySelectorAll('#bgWithList [data-with]:checked')].map(x=>({id:x.dataset.with, name:x.dataset.name}));
 }
+function bgFormAmt(){   // {raw, cur, toEur} — l'importo digitato nella valuta selezionata sul bottone
+  const raw = parseFloat(document.getElementById('bgAmt').value);
+  const mode = document.getElementById('bgAmtCur').dataset.mode;
+  const cur = (mode==='trip' && tripCur!=='EUR') ? tripCur : 'EUR';
+  const r = cur==='EUR' ? 1 : tripRate();
+  return {raw, cur, toEur: r ? (v=>v/r) : null};
+}
+function bgFmtAmt(v, f){  // «1.833 JPY (≈ 9,90 €)» oppure «12,50 €»
+  if(f.cur==='EUR') return eur(v);
+  return fmtCur(v, f.cur) + (f.toEur ? ' (≈ '+eur(f.toEur(v))+')' : '');
+}
 function bgWithCount(){
   const n = bgWithSelected().length + 1;
-  const amt = parseFloat(document.getElementById('bgAmt').value);
-  const q = (!isNaN(amt) && amt>0) ? ' · quota '+eur(amt/n)+' a testa' : '';
+  const f = bgFormAmt();
+  const q = (!isNaN(f.raw) && f.raw>0) ? ' · quota '+bgFmtAmt(f.raw/n, f)+' a testa' : '';
   document.getElementById('bgWithCount').textContent = 'Divisa tra '+n+' person'+(n===1?'a':'e')+' (te incluso)'+q;
+  bgSpreadInfoRender();   // la distribuzione dipende dalla divisione
 }
-document.getElementById('bgShared').addEventListener('change', ()=>bgWithUI(null));
+document.getElementById('bgShared').addEventListener('change', ()=>{ bgWithUI(null); bgSpreadInfoRender(); });
 document.getElementById('bgWithList').addEventListener('change', bgWithCount);
 document.getElementById('bgAmt').addEventListener('input', ()=>{ if(document.getElementById('bgWithBox').style.display!=='none') bgWithCount(); });
 function bgSpreadN(){
@@ -2012,10 +2025,13 @@ function bgSpreadInfoRender(){
   info.style.display = on ? 'block' : 'none';
   if(!on) return;
   const n = bgSpreadN();
-  const amt = parseFloat(document.getElementById('bgAmt').value);
+  const f = bgFormAmt();
+  const shared = document.getElementById('bgShared').checked;
+  const parts = shared ? bgWithSelected().length + 1 : 1;   // se è condivisa, si spalma la TUA quota
   const daysN = tripDays();
-  let txt = isNaN(amt)||amt<=0 ? n+' giorni: sul budget peserà ¹⁄'+n+' al giorno.' 
-    : n+' giorni: '+eur(amt/n)+' al giorno sul budget, dal giorno della spesa.';
+  let txt;
+  if(isNaN(f.raw) || f.raw<=0) txt = n+' giorni: sul budget peserà ¹⁄'+n+' al giorno'+(parts>1?' della tua quota':'')+'.';
+  else txt = n+' giorni: '+(parts>1?'la tua quota ('+bgFmtAmt(f.raw/parts, f)+') pesa ':'')+bgFmtAmt(f.raw/parts/n, f)+' al giorno sul budget, dal giorno della spesa.';
   if(daysN>0 && n>daysN) txt += ' ⚠️ Supera i giorni del viaggio ('+daysN+'): va bene comunque, le fette oltre il rientro non pesano sui giorni di viaggio.';
   info.textContent = txt;
 }
