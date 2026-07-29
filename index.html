@@ -83,6 +83,8 @@ button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .btn-danger{background:transparent;color:var(--pin);border:1px solid var(--pin)}
 .btn-sm{min-height:40px;padding:8px 14px;font-size:13.5px}
 .card-accent{border:1.5px solid var(--teal);box-shadow:var(--shadow),0 0 0 4px var(--teal-soft)}
+#view-budget .card-accent label.row{margin-top:2px;padding:3px 0}
+#view-budget .card-accent .row.mt8{margin-top:6px}
 /* --- dropdown integrato: le opzioni scendono in pagina, niente pannelli di sistema --- */
 .dd-wrap{position:relative;min-width:0}
 .dd-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:48px;
@@ -254,9 +256,9 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div class="card">
     <input type="number" id="fxAmount" inputmode="decimal" placeholder="Importo" value="100">
     <div class="fx-grid mt8">
-      <select id="fxFrom"></select>
+      <select id="fxFrom" data-dd-short></select>
       <button class="fx-swap" id="fxSwap" title="Inverti valute">⇅</button>
-      <select id="fxTo"></select>
+      <select id="fxTo" data-dd-short></select>
     </div>
     <div class="fx-result" id="fxResult">—</div>
     <div id="fxOptsT" class="small mt8" style="cursor:pointer;color:var(--teal);font-weight:600"><span id="fxOptsArrow">▸</span> Tassi e opzioni</div>
@@ -309,7 +311,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 <section class="view" id="view-mappa">
   <div class="eyebrow">🔍 Cerca e aggiungi luoghi</div>
   <div class="row" style="margin-bottom:8px">
-    <input id="mapSearch" placeholder="Cerca luogo o indirizzo (es. Via Roma 12, Torino)" enterkeyhint="search" autocomplete="off">
+    <input id="mapSearch" placeholder="Cerca luogo o indirizzo…" enterkeyhint="search" autocomplete="off" style="background:#fff;border-color:var(--line);box-shadow:var(--shadow)">
     <button class="btn btn-primary" id="mapSearchBtn" style="min-width:52px">🔍</button>
   </div>
   <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
@@ -438,7 +440,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
       <div class="small" id="bgSplitInfo">Sul tuo budget peserà solo la tua quota. Gli altri vedranno il proprio debito in Home e nel Budget, e tu dovrai confermare i pagamenti ricevuti.</div>
     </div>
     <label class="row mt8" style="font-size:13px;color:var(--ink-soft)">
-      <input type="checkbox" id="bgSpread" style="width:18px;height:18px;accent-color:var(--teal)"> Distribuisci su più giorni (abbonamenti, pass…)
+      <input type="checkbox" id="bgSpread" style="width:18px;height:18px;accent-color:var(--teal)"> Distribuisci su più giorni
     </label>
     <div class="row mt8" id="bgSpreadRow" style="display:none">
       <div class="small" style="flex:1">Su quanti giorni? (dal giorno della spesa)</div>
@@ -629,7 +631,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 
   <div class="eyebrow coll" data-coll="synclive">🔄 Sincronizzazione live</div>
   <div class="card">
-    <div class="small" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">Versione app: v31 <span class="live" id="liveBadge">● LIVE</span></div>
+    <div class="small" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">Versione app: v32 <span class="live" id="liveBadge">● LIVE</span></div>
     <div class="small">Stessa configurazione + stesso codice stanza = dati in tempo reale per tutti.</div>
     <textarea id="fbCfg" rows="4" class="mt8" placeholder="Incolla qui la configurazione Firebase (il blocco firebaseConfig = { ... })"></textarea>
     <input id="fbRoom" class="mt8" placeholder="Codice stanza condiviso (es. viaggio-lisbona-2026)">
@@ -656,7 +658,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v31</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v32</div>
 </section>
 </main>
 
@@ -716,7 +718,9 @@ document.getElementById('todayLabel').textContent =
 
 /* ============ VALUTA ============ */
 const CURRENCIES = ['EUR','USD','GBP','CHF','JPY','THB','AED','TRY','AUD','CAD','MXN','BRL','IDR','VND','INR','CNY','KRW','SEK','NOK','DKK','PLN','CZK','HUF','ZAR','EGP','MAD'];
-const CUR_NAMES = {EUR:'Euro',USD:'Dollaro USA',GBP:'Sterlina',CHF:'Franco svizzero',JPY:'Yen giapponese',THB:'Baht thailandese',AED:'Dirham EAU',TRY:'Lira turca',AUD:'Dollaro australiano',CAD:'Dollaro canadese',MXN:'Peso messicano',BRL:'Real brasiliano',IDR:'Rupia indonesiana',VND:'Dong vietnamita',INR:'Rupia indiana',CNY:'Yuan cinese',KRW:'Won coreano',SEK:'Corona svedese',NOK:'Corona norvegese',DKK:'Corona danese',PLN:'Zloty polacco',CZK:'Corona ceca',HUF:'Fiorino ungherese',ZAR:'Rand sudafricano',EGP:'Sterlina egiziana',MAD:'Dirham marocchino'};
+const CUR_NAMES = {EUR:'Euro',USD:'Dollaro USA',GBP:'Sterlina',CHF:'Franco svizzero',JPY:'Yen giapponese',THB:'Baht thailandese',AED:'Dirham EAU',TRY:'Lira turca',AUD:'Dollaro australiano',CAD:'Dollaro canadese',MXN:'Peso messicano',BRL:'Real brasiliano',IDR:'Rupia indonesiana',VND:'Dong vietnamita',INR:'Rupia indiana',CNY:'Yuan cinese',KRW:'Won coreano',SEK:'Corona svedese',NOK:'Corona norvegese',DKK:'Corona danese',PLN:'Zloty polacco',CZK:'Corona ceca',HUF:'Fiorino ungherese',ZAR:'Rand sudafricano',EGP:'Sterlina egiziana',MAD:'Dirham marocchino',
+TWD:'Dollaro taiwanese',HKD:'Dollaro di Hong Kong',SGD:'Dollaro di Singapore',NZD:'Dollaro neozelandese',PHP:'Peso filippino',MYR:'Ringgit malese',ILS:'Shekel israeliano',ISK:'Corona islandese',RON:'Leu rumeno',BGN:'Lev bulgaro',RSD:'Dinaro serbo',UAH:'Grivnia ucraina',GEL:'Lari georgiano',AMD:'Dram armeno',AZN:'Manat azero',KZT:'Tenge kazako',UZS:'Som uzbeko',LKR:'Rupia dello Sri Lanka',BDT:'Taka bengalese',PKR:'Rupia pakistana',NPR:'Rupia nepalese',KHR:'Riel cambogiano',LAK:'Kip laotiano',MMK:'Kyat birmano',MNT:'Tugrik mongolo',CLP:'Peso cileno',COP:'Peso colombiano',PEN:'Sol peruviano',ARS:'Peso argentino',UYU:'Peso uruguaiano',BOB:'Boliviano',PYG:'Guaraní paraguaiano',CRC:'Colón costaricano',GTQ:'Quetzal guatemalteco',DOP:'Peso dominicano',JMD:'Dollaro giamaicano',TTD:'Dollaro di Trinidad',KES:'Scellino keniota',TZS:'Scellino tanzaniano',UGX:'Scellino ugandese',GHS:'Cedi ghanese',NGN:'Naira nigeriana',XOF:'Franco CFA (ovest)',XAF:'Franco CFA (centro)',ETB:'Birr etiope',DZD:'Dinaro algerino',TND:'Dinaro tunisino',MUR:'Rupia mauriziana',BWP:'Pula del Botswana',ZMW:'Kwacha zambiano',FJD:'Dollaro delle Fiji',SAR:'Riyal saudita',QAR:'Riyal del Qatar',KWD:'Dinaro kuwaitiano',BHD:'Dinaro del Bahrein',OMR:'Rial omanita',JOD:'Dinaro giordano'};
+CURRENCIES.push(...Object.keys(CUR_NAMES).filter(c=>!CURRENCIES.includes(c)));
 const curLabel = c => c + ' · ' + (CUR_NAMES[c]||c);
 const fxFrom = document.getElementById('fxFrom'), fxTo = document.getElementById('fxTo');
 CURRENCIES.forEach(c=>{ fxFrom.add(new Option(curLabel(c),c)); fxTo.add(new Option(curLabel(c),c)); });
@@ -748,22 +752,30 @@ async function fxFetch(){
   const el = document.getElementById('fxStatus');
   el.innerHTML = '<span class="dot off"></span>Aggiornamento…';
   try{
-    const r = await fetch('https://api.frankfurter.dev/v1/latest?base=EUR');
+    // fonte primaria: ~160 valute mondiali (TWD, HKD, SGD…)
+    const r = await fetch('https://open.er-api.com/v6/latest/EUR');
     const d = await r.json();
-    fxRates = d.rates; fxDate = d.date; fxManual = null;
+    if(!d || !d.rates) throw new Error('no-rates');
+    fxRates = d.rates; fxDate = new Date().toLocaleDateString('it-IT'); fxManual = null;
     await store.set('fxRates', {rates:fxRates, date:fxDate});
   }catch(e){
     try{
-      const r2 = await fetch('https://open.er-api.com/v6/latest/EUR');
+      // riserva: Banca Centrale Europea (~30 valute principali)
+      const r2 = await fetch('https://api.frankfurter.dev/v1/latest?base=EUR');
       const d2 = await r2.json();
-      if(d2 && d2.rates){ fxRates=d2.rates; fxDate=new Date().toLocaleDateString('it-IT'); fxManual=null;
-        await store.set('fxRates',{rates:fxRates,date:fxDate}); }
+      fxRates = d2.rates; fxDate = d2.date; fxManual = null;
+      await store.set('fxRates',{rates:fxRates,date:fxDate});
     }catch(e2){}
   }
   fxStatusMsg(); fxCompute();
   if(typeof renderBudget==='function') renderBudget();
 }
 document.getElementById('fxRefresh').addEventListener('click', fxFetch);
+/* Invio = chiudi tastiera: senza form, Android altrimenti la lascia aperta e fa slittare la pagina */
+['fxAmount','qAmt','bgAmt','fxManualRate'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } });
+});
 async function fxSaveSel(){
   await store.set('fxSel', {from:fxFrom.value, to:fxTo.value, amount:document.getElementById('fxAmount').value});
 }
@@ -1807,7 +1819,7 @@ function renderBudget(){
     }else{
       const daily = Math.max(budgetTotal - spentBefore, 0) / remDays;
       const leftToday = daily - spentToday;
-      dailyLine = '<div>Speso oggi: '+both(spentToday)+'</div><div>Rimanente: '+both(budgetTotal-spent)+'</div>';
+      dailyLine = '<div>Speso oggi: '+both(spentToday)+'</div><div>Rimanente oggi: '+both(leftToday)+'</div>';
       const dailyOpen = collState['bgdaily']===true;
       const remPct = daily>0 ? Math.max(0, Math.min(100, leftToday/daily*100)) : 0;
       dEl.innerHTML =
@@ -3577,7 +3589,7 @@ document.getElementById('fxOptsT').addEventListener('click', ()=>{
 });
 
 /* ============ DROPDOWN INTEGRATO: le opzioni scendono dalla casella ============ */
-function ddSync(sel){ if(sel._dd){ const o=sel.options[sel.selectedIndex]; sel._dd.querySelector('.cv').textContent = o ? o.text : '—'; } }
+function ddSync(sel){ if(sel._dd){ const o=sel.options[sel.selectedIndex]; sel._dd.querySelector('.cv').textContent = o ? (sel.dataset.ddShort!==undefined ? sel.value : o.text) : '—'; } }
 function ddCloseAll(){ document.querySelectorAll('.dd-wrap.open').forEach(w=>w.classList.remove('open')); }
 function ddEnhance(sel){
   if(sel._dd || sel.dataset.native!==undefined) return;
