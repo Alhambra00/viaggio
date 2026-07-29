@@ -100,6 +100,8 @@ button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .dd-opt:last-child{border-bottom:none}
 .dd-opt.sel{color:var(--teal);font-weight:700;background:var(--teal-soft)}
 .dd-grp{padding:9px 14px 4px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+.dd-search{position:sticky;top:0;background:var(--card);padding:8px;border-bottom:1px solid var(--line);z-index:2}
+.dd-search input{min-height:40px;font-size:15px;border-radius:10px}
 body.dark .dd-wrap.open .dd-btn{background:#141C1F}
 body.dark .dd-panel{box-shadow:0 14px 40px rgba(0,0,0,.55)}
 /* --- animazioni cambio sezione --- */
@@ -142,7 +144,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 .dnode.droptgt{outline:2px solid var(--teal);background:var(--teal-soft)}
 .drop-above{box-shadow:0 -3px 0 0 var(--teal) !important}
 .drop-below{box-shadow:0 3px 0 0 var(--teal) !important}
-.item.flash{animation:flashbg 1.6s ease}
+.item.flash,.check.flash{animation:flashbg 1.6s ease}
 @keyframes flashbg{0%,60%{background:var(--teal-soft)}100%{background:transparent}}
 #dragGhost{position:fixed;z-index:1150;pointer-events:none;opacity:.9;background:#fff;
   border:1px solid var(--teal);border-radius:10px;padding:8px 12px;font-weight:600;font-size:14px;
@@ -208,7 +210,10 @@ nav.tabs .ic{font-size:23px;line-height:1}
 
 /* ---- strumenti ---- */
 .tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.check{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.check{display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid var(--line)}
+#ckList .icon-btn{width:30px;height:30px;font-size:13px;border-radius:9px}
+#ckList .check span{font-size:14px}
+#ckList input[type=checkbox]{width:18px;height:18px}
 .check:last-child{border-bottom:none}
 .check input[type=checkbox]{width:20px;height:20px;accent-color:var(--teal);flex-shrink:0}
 .empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:18px 10px;
@@ -319,7 +324,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div class="small mt8" id="mapFilterInfo" style="display:none"></div>
 
   <div class="eyebrow coll" data-coll="itin">🗓 Itinerario per giorni</div>
-  <div class="card">
+  <div class="card card-accent">
     <div class="row">
       <button class="icon-btn" id="itPrev">◀</button>
       <input type="date" id="itDate" style="flex:1">
@@ -461,35 +466,31 @@ nav.tabs .ic{font-size:23px;line-height:1}
 
 <!-- ================= DOCUMENTI ================= -->
 <section class="view" id="view-docs">
-  <div class="eyebrow">📂 Documenti · solo su questo telefono</div>
-  <div class="card">
-    <div class="row">
-      <button class="btn btn-primary" id="docUploadBtn" style="flex:1">📤 Carica file</button>
-      <button class="btn btn-ghost" id="docNewFolderBtn" style="flex:1">📁 Nuova cartella</button>
+  <input type="file" id="docFileInput" multiple style="display:none">
+  <input type="file" id="docImportFile" accept=".json,application/json" style="display:none">
+  <div class="card" style="padding-top:10px">
+    <div id="docBar" style="position:sticky;top:calc(var(--headH,56px) + 6px);z-index:5;background:var(--card);display:flex;align-items:center;gap:8px;padding:6px 0 10px;border-bottom:1px solid var(--line)">
+      <div class="eyebrow" style="margin:0;flex:1">🗄 Archivio</div>
+      <button class="icon-btn" id="docNewFolderBtn" title="Nuova cartella">📁+</button>
+      <button class="icon-btn" id="docUploadBtn" title="Carica file">📤</button>
+      <button class="icon-btn" id="docJsonBtn" title="Esporta / importa">⋯</button>
+    </div>
+    <div class="row mt8" id="docJsonRow" style="display:none">
+      <button class="btn btn-ghost btn-sm" id="docExportBtn" style="flex:1">📦 Esporta json</button>
+      <button class="btn btn-ghost btn-sm" id="docImportBtn" style="flex:1">📥 Importa json</button>
     </div>
     <div class="row mt8" id="docFolderRow" style="display:none">
       <input id="docFolderName" placeholder="Nome cartella (es. Voli, Hotel…)">
       <button class="btn btn-primary" id="docFolderOk" style="min-width:60px">OK</button>
     </div>
-    <input type="file" id="docFileInput" multiple style="display:none">
-    <div class="row mt8">
-      <button class="btn btn-ghost" id="docExportBtn" style="flex:1">📦 Esporta struttura</button>
-      <button class="btn btn-ghost" id="docImportBtn" style="flex:1">📥 Importa struttura</button>
-    </div>
-    <input type="file" id="docImportFile" accept=".json,application/json" style="display:none">
     <div class="small mt8" id="docXferStatus"></div>
     <div class="small mt8" id="docTarget"></div>
-    
-    <div class="small mt8" id="docQuota"></div>
-  </div>
-
-  <div class="eyebrow">🗄 Archivio</div>
-  <div class="card">
-    <div class="row" style="margin-bottom:6px">
-      <button class="btn btn-ghost" id="docExpandAll" style="flex:1">▾ Espandi tutto</button>
-      <button class="btn btn-ghost" id="docCollapseAll" style="flex:1">▸ Chiudi tutto</button>
+    <div class="row mt8">
+      <button class="btn btn-ghost btn-sm" id="docExpandAll" style="flex:1">▾ Espandi tutto</button>
+      <button class="btn btn-ghost btn-sm" id="docCollapseAll" style="flex:1">▸ Chiudi tutto</button>
     </div>
     <div id="docTreeEl"></div>
+    <div class="small mt8" id="docQuota"></div>
   </div>
 </section>
 
@@ -508,7 +509,10 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div class="eyebrow coll" data-coll="cklist">🎒 Checklist bagaglio</div>
   <div class="card">
     <div class="row">
-      <input id="ckInput" placeholder="Aggiungi un oggetto…">
+      <div class="ph-wrap" style="flex:1;position:relative">
+        <input id="ckInput" placeholder="Aggiungi un oggetto…" autocomplete="off">
+        <div id="ckSuggest" class="dd-panel" style="top:calc(100% + 4px)"></div>
+      </div>
       <button class="btn btn-primary" id="ckAdd">+</button>
     </div>
     <label class="row mt8" id="ckAllWrap" style="display:none;font-size:13px;color:var(--ink-soft)">
@@ -625,7 +629,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 
   <div class="eyebrow coll" data-coll="synclive">🔄 Sincronizzazione live</div>
   <div class="card">
-    <div class="small" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">Versione app: v30 <span class="live" id="liveBadge">● LIVE</span></div>
+    <div class="small" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">Versione app: v31 <span class="live" id="liveBadge">● LIVE</span></div>
     <div class="small">Stessa configurazione + stesso codice stanza = dati in tempo reale per tutti.</div>
     <textarea id="fbCfg" rows="4" class="mt8" placeholder="Incolla qui la configurazione Firebase (il blocco firebaseConfig = { ... })"></textarea>
     <input id="fbRoom" class="mt8" placeholder="Codice stanza condiviso (es. viaggio-lisbona-2026)">
@@ -652,7 +656,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v30</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v31</div>
 </section>
 </main>
 
@@ -712,8 +716,10 @@ document.getElementById('todayLabel').textContent =
 
 /* ============ VALUTA ============ */
 const CURRENCIES = ['EUR','USD','GBP','CHF','JPY','THB','AED','TRY','AUD','CAD','MXN','BRL','IDR','VND','INR','CNY','KRW','SEK','NOK','DKK','PLN','CZK','HUF','ZAR','EGP','MAD'];
+const CUR_NAMES = {EUR:'Euro',USD:'Dollaro USA',GBP:'Sterlina',CHF:'Franco svizzero',JPY:'Yen giapponese',THB:'Baht thailandese',AED:'Dirham EAU',TRY:'Lira turca',AUD:'Dollaro australiano',CAD:'Dollaro canadese',MXN:'Peso messicano',BRL:'Real brasiliano',IDR:'Rupia indonesiana',VND:'Dong vietnamita',INR:'Rupia indiana',CNY:'Yuan cinese',KRW:'Won coreano',SEK:'Corona svedese',NOK:'Corona norvegese',DKK:'Corona danese',PLN:'Zloty polacco',CZK:'Corona ceca',HUF:'Fiorino ungherese',ZAR:'Rand sudafricano',EGP:'Sterlina egiziana',MAD:'Dirham marocchino'};
+const curLabel = c => c + ' · ' + (CUR_NAMES[c]||c);
 const fxFrom = document.getElementById('fxFrom'), fxTo = document.getElementById('fxTo');
-CURRENCIES.forEach(c=>{ fxFrom.add(new Option(c,c)); fxTo.add(new Option(c,c)); });
+CURRENCIES.forEach(c=>{ fxFrom.add(new Option(curLabel(c),c)); fxTo.add(new Option(curLabel(c),c)); });
 fxFrom.value='EUR'; fxTo.value='USD';
 let fxRates = null, fxDate = null, fxManual = null;
 
@@ -1394,6 +1400,37 @@ document.getElementById('ckList').addEventListener('click', async ev=>{
   }
   await saveCk();
 });
+/* suggerimenti live dagli oggetti già inseriti (come la ricerca Google) */
+function ckSuggestRender(){
+  const q = document.getElementById('ckInput').value.trim().toLowerCase();
+  const box = document.getElementById('ckSuggest');
+  if(!q){ box.classList.remove('open'); box.style.opacity=0; box.style.pointerEvents='none'; return; }
+  const seen = new Set();
+  const pool = [...ckShared.filter(c=>!ckHidden.includes(c.id)).map(c=>({id:c.id,text:c.text})),
+                ...ckPersonal.map(c=>({id:c.id,text:c.text}))];
+  const hits = pool.filter(c=>{
+    const t=(c.text||'').toLowerCase();
+    if(!t.includes(q) || seen.has(t)) return false;
+    seen.add(t); return true;
+  }).slice(0,6);
+  if(!hits.length){ box.style.opacity=0; box.style.pointerEvents='none'; return; }
+  box.innerHTML = hits.map(c=>'<div class="dd-opt" data-ck-jump="'+c.id+'">↩ '+esc(c.text)+' <span class="small" style="opacity:.6">già in lista</span></div>').join('');
+  box.style.opacity=1; box.style.pointerEvents='auto'; box.style.transform='none';
+}
+document.getElementById('ckInput').addEventListener('input', ckSuggestRender);
+document.getElementById('ckSuggest').addEventListener('click', ev=>{
+  const j = ev.target.closest('[data-ck-jump]'); if(!j) return;
+  ev.stopPropagation();
+  document.getElementById('ckInput').value='';
+  ckSuggestRender();
+  const row = document.querySelector('#ckList [data-ck="'+j.dataset.ckJump+'"]');
+  if(row){
+    const r = row.closest('.check');
+    if(r){ if(r.scrollIntoView) r.scrollIntoView({block:'center',behavior:'smooth'}); r.classList.add('flash'); setTimeout(()=>r.classList.remove('flash'),1400); }
+  }
+});
+document.addEventListener('click', ()=>{ const b=document.getElementById('ckSuggest'); if(b){ b.style.opacity=0; b.style.pointerEvents='none'; } });
+
 document.getElementById('ckAdd').addEventListener('click', async ()=>{
   const v = document.getElementById('ckInput').value.trim(); if(!v) return;
   ckAddItem(v);
@@ -1567,7 +1604,7 @@ BG_CATS.forEach(c=>{ document.getElementById('qCat').add(new Option(c,c)); docum
 let expenses=[], budgetTotal=0, groupExpenses=[], userName='';
 let tripCur='USD', tripStart='', tripEnd='';
 const bgCurSel = document.getElementById('bgCur');
-CURRENCIES.filter(c=>c!=='EUR').forEach(c=>bgCurSel.add(new Option(c,c)));
+CURRENCIES.filter(c=>c!=='EUR').forEach(c=>bgCurSel.add(new Option(curLabel(c),c)));
 const eur = v => v.toLocaleString('it-IT',{maximumFractionDigits:2})+' €';
 const fmtCur = (v,c) => v.toLocaleString('it-IT',{maximumFractionDigits:2})+' '+c;
 function tripRate(){ // 1 EUR = ? valuta viaggio
@@ -1766,15 +1803,17 @@ function renderBudget(){
     else remDays = Math.round((new Date(tripEnd) - new Date(today))/86400000) + 1;
     if(remDays<=0){
       dEl.innerHTML = '<div class="empty">Viaggio concluso: hai speso '+both(spent)+' su '+both(budgetTotal)+'.</div>';
-      dailyLine = 'Rimanente: '+eur(budgetTotal-spent);
+      dailyLine = '<div>Rimanente: '+both(budgetTotal-spent)+'</div>';
     }else{
       const daily = Math.max(budgetTotal - spentBefore, 0) / remDays;
       const leftToday = daily - spentToday;
-      dailyLine = 'Speso oggi: '+eur(spentToday)+' · Rimanente: '+eur(budgetTotal-spent);
+      dailyLine = '<div>Speso oggi: '+both(spentToday)+'</div><div>Rimanente: '+both(budgetTotal-spent)+'</div>';
       const dailyOpen = collState['bgdaily']===true;
       const remPct = daily>0 ? Math.max(0, Math.min(100, leftToday/daily*100)) : 0;
       dEl.innerHTML =
-        '<div class="result-big" style="color:'+(leftToday<0?'var(--pin)':'var(--ink)')+'">Rimanente '+eur(leftToday)+'</div>'+
+        (()=>{ const txt='Rimanente '+both(leftToday);
+          const fs = txt.length>30 ? 16 : (txt.length>24 ? 19 : 24);
+          return '<div class="result-big" style="font-size:'+fs+'px;color:'+(leftToday<0?'var(--pin)':'var(--ink)')+'">'+txt+'</div>'; })()+
         '<div id="bgDailyToggle" class="mt8" style="cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)">'+
         '<span style="color:var(--teal)">'+(dailyOpen?'▾':'▸')+'</span> Dettaglio</div>'+
         (dailyOpen ?
@@ -1789,9 +1828,9 @@ function renderBudget(){
     }
   }else{
     dEl.innerHTML = '<div class="empty">Imposta il budget totale e le date del viaggio qui sopra: calcolerò il budget di ogni giorno (rimanente ÷ giorni restanti), aggiornato ogni mezzanotte.</div>';
-    dailyLine = budgetTotal>0 ? 'Rimanente: '+eur(budgetTotal-spent) : 'Speso: '+eur(spent);
+    dailyLine = budgetTotal>0 ? '<div>Rimanente: '+both(budgetTotal-spent)+'</div>' : '<div>Speso: '+both(spent)+'</div>';
   }
-  document.getElementById('qRemain').textContent = dailyLine;
+  document.getElementById('qRemain').innerHTML = dailyLine;
 
   document.getElementById('bgChart').innerHTML = bgChartSVG() + bgDayCatHTML();
   const list = document.getElementById('bgList');
@@ -2257,18 +2296,25 @@ function folderOptions(excludeId){ // tutte le cartelle valide come destinazione
 }
 function docFolderName(){ const f = docTree.find(n=>n.id===docSel); return f ? '📁 '+f.name : '🏠 Principale'; }
 let docMenu=null, docConfirmDel=null;
+let docMenuMode = null;   // null = menu; 'ren' | 'move' = azione scelta
 function docActionsHTML(n){
+  const box = c => '<div style="margin:2px 0 8px 24px;padding:10px;background:var(--teal-soft);border-radius:12px">'+c+'</div>';
+  if(docMenuMode==='ren'){
+    return box('<div class="row"><input id="docRen" value="'+esc(n.name)+'"><button class="btn btn-primary" data-dren="'+n.id+'" style="min-width:56px">OK</button></div>');
+  }
+  if(docMenuMode==='move'){
+    const opts = folderOptions(n.type==='folder' ? n.id : null)
+      .map(o=>'<option value="'+o.id+'"'+(((n.parent||null)===(o.id==='__root__'?null:o.id))?' selected':'')+'>'+o.label+'</option>').join('');
+    return box('<div class="row"><select id="docMove">'+opts+'</select><button class="btn btn-primary" data-dmove="'+n.id+'" style="min-width:70px">Sposta</button></div>');
+  }
   const stats = n.type==='folder' ? docStats(n.id) : null;
-  const opts = folderOptions(n.type==='folder' ? n.id : null)
-    .map(o=>'<option value="'+o.id+'"'+(((n.parent||null)===(o.id==='__root__'?null:o.id))?' selected':'')+'>'+o.label+'</option>').join('');
   const delLabel = docConfirmDel===n.id
-    ? '⚠ Confermi? '+(stats&&stats.files?'('+stats.files+' file)':'')
-    : '🗑 Elimina'+(n.type==='folder'?' cartella':'');
-  return '<div style="margin:2px 0 8px 24px;padding:10px;background:var(--teal-soft);border-radius:10px">'+
-    '<div class="row"><input id="docRen" value="'+esc(n.name)+'"><button class="btn btn-primary" data-dren="'+n.id+'" style="min-width:56px">✎ OK</button></div>'+
-    '<div class="row mt8"><select id="docMove">'+opts+'</select><button class="btn btn-primary" data-dmove="'+n.id+'" style="min-width:70px">↔ Sposta</button></div>'+
-    '<button class="btn btn-danger mt8" data-ddel="'+n.id+'" style="width:100%">'+delLabel+'</button>'+
-    '</div>';
+    ? '⚠ Confermi?'+(stats&&stats.files?' ('+stats.files+' file)':'')
+    : '🗑 Elimina';
+  return box('<div class="row">'+
+    '<button class="btn btn-ghost btn-sm" data-dact="ren" style="flex:1">✎ Rinomina</button>'+
+    '<button class="btn btn-ghost btn-sm" data-dact="move" style="flex:1">↔ Sposta</button>'+
+    '<button class="btn btn-danger btn-sm" data-ddel="'+n.id+'" style="flex:1">'+delLabel+'</button></div>');
 }
 function renderDocs(){
   document.getElementById('docTarget').textContent = 'Destinazione: '+docFolderName();
@@ -2313,11 +2359,22 @@ document.getElementById('docCollapseAll').addEventListener('click', ()=>{
   docOpenSet.clear(); docMenu=null; docConfirmDel=null; renderDocs();
 });
 document.getElementById('docTreeEl').addEventListener('click', async ev=>{
+  const act = ev.target.closest('[data-dact]');
+  if(act){
+    docMenuMode = act.dataset.dact;
+    renderDocs();
+    const mv = document.getElementById('docMove');
+    if(mv) ddEnhance(mv);                       // lo Sposta usa il dropdown ricercabile
+    const rn = document.getElementById('docRen');
+    if(rn){ rn.focus(); rn.select && rn.select(); }
+    return;
+  }
   if(Date.now() - dragEndedAt < 350) return; // era la fine di un trascinamento
   const menu = ev.target.closest('[data-dmenu]');
   if(menu){
     const id = menu.dataset.dmenu;
     docMenu = (docMenu===id) ? null : id;
+    docMenuMode = null;
     docConfirmDel = null;
     renderDocs();
     return;
@@ -2384,6 +2441,10 @@ document.getElementById('docFolderOk').addEventListener('click', async ()=>{
   document.getElementById('docFolderRow').style.display='none';
   await saveDocTree();
 });
+document.getElementById('docJsonBtn').addEventListener('click', ()=>{
+  const r = document.getElementById('docJsonRow');
+  r.style.display = r.style.display==='none' ? 'flex' : 'none';
+});
 document.getElementById('docUploadBtn').addEventListener('click', ()=>document.getElementById('docFileInput').click());
 document.getElementById('docFileInput').addEventListener('change', async ev=>{
   const files = [...ev.target.files];
@@ -2401,6 +2462,47 @@ document.getElementById('docFileInput').addEventListener('change', async ev=>{
   if(docSel) docOpenSet.add(docSel);
   await saveDocTree();
 });
+/* PDF dentro l'app: pdf.js disegna le pagine su canvas (Chrome Android non li mostra da solo) */
+let pdfjsReady = null;
+function loadPdfjs(){
+  if(pdfjsReady) return pdfjsReady;
+  pdfjsReady = new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = ()=>{
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      res(window.pdfjsLib);
+    };
+    s.onerror = ()=>{ pdfjsReady=null; rej(new Error('pdfjs')); };
+    document.head.appendChild(s);
+  });
+  return pdfjsReady;
+}
+async function renderPdfInline(dataUrl, body){
+  try{
+    const lib = await loadPdfjs();
+    const bin = atob(dataUrl.split(',')[1]);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    const pdf = await lib.getDocument({data: bytes}).promise;
+    body.innerHTML = '';
+    const maxW = Math.min(900, body.clientWidth || 360);
+    for(let p=1; p<=pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const base = page.getViewport({scale:1});
+      const scale = maxW / base.width;
+      const vp = page.getViewport({scale: scale * (window.devicePixelRatio||1)});
+      const cv = document.createElement('canvas');
+      cv.width = vp.width; cv.height = vp.height;
+      cv.style.width = '100%'; cv.style.borderRadius = '10px'; cv.style.marginBottom = '10px'; cv.style.background='#fff';
+      body.appendChild(cv);
+      await page.render({canvasContext: cv.getContext('2d'), viewport: vp}).promise;
+    }
+    if(!pdf.numPages) throw new Error('vuoto');
+  }catch(e){
+    body.innerHTML = '<div class="small" style="color:#9CC6C9;padding:24px 8px">Non riesco a mostrare questo PDF qui (serve rete al primo utilizzo del lettore). Usa ⬇ Scarica per aprirlo col telefono.</div>';
+  }
+}
 async function openDoc(id){
   const n = docTree.find(x=>x.id===id); if(!n) return;
   const data = await blobGet(id);
@@ -2413,8 +2515,8 @@ async function openDoc(id){
   if(n.mime && n.mime.startsWith('image')){
     body.innerHTML = '<img src="'+data+'" style="max-width:100%;border-radius:10px" alt="'+esc(n.name)+'">';
   }else if(n.mime && n.mime.includes('pdf')){
-    body.innerHTML = '<iframe src="'+data+'" style="width:100%;height:75vh;border:none;border-radius:10px;background:#fff"></iframe>'+
-      '<div class="small mt8" style="color:#9CC6C9">Se il PDF non compare, usa ⬇ Scarica per aprirlo con il lettore del telefono.</div>';
+    body.innerHTML = '<div class="small" style="color:#9CC6C9;padding:18px">Apro il PDF…</div>';
+    renderPdfInline(data, body);
   }else{
     body.innerHTML = '<div class="small" style="color:#9CC6C9;padding:24px 8px">Anteprima non disponibile per questo tipo di file: usa ⬇ Scarica per aprirlo con un\'app del telefono.</div>';
   }
@@ -3032,7 +3134,10 @@ function fixNavPadding(){
   if(!nav || !main) return;
   /* barre fixed = fuori dal flusso: compenso su <main> misurando i rettangoli reali,
      così qualunque dimensione font/safe-area del telefono torna nei conti. */
-  if(head) main.style.paddingTop = (head.offsetHeight + 10) + 'px';
+  if(head){
+    main.style.paddingTop = (head.offsetHeight + 10) + 'px';
+    document.documentElement.style.setProperty('--headH', head.offsetHeight + 'px');
+  }
   const navSpace = Math.max(70, window.innerHeight - nav.getBoundingClientRect().top);
   main.style.paddingBottom = (navSpace + 18) + 'px';
   document.body.style.paddingBottom = '0px';
@@ -3498,6 +3603,7 @@ function ddEnhance(sel){
     ddCloseAll();
     if(was) return;
     panel.innerHTML = '';                            // opzioni lette fresche a ogni apertura
+    const idx = [];                                  // {el, txt, grp} per la ricerca
     const mk = o=>{
       const d = document.createElement('div');
       d.className = 'dd-opt' + (o.value===sel.value ? ' sel' : '');
@@ -3510,16 +3616,42 @@ function ddEnhance(sel){
       });
       return d;
     };
+    let nOpts = 0;
+    const grps = [];
     [...sel.children].forEach(ch=>{
       if(ch.tagName==='OPTGROUP'){
         const g = document.createElement('div'); g.className='dd-grp'; g.textContent = ch.label;
-        panel.appendChild(g);
-        [...ch.children].forEach(o=>panel.appendChild(mk(o)));
-      } else panel.appendChild(mk(ch));
+        panel.appendChild(g); grps.push({el:g, kids:[]});
+        [...ch.children].forEach(o=>{ const d=mk(o); panel.appendChild(d); nOpts++;
+          idx.push({el:d, txt:o.text.toLowerCase()}); grps[grps.length-1].kids.push(d); });
+      } else { const d=mk(ch); panel.appendChild(d); nOpts++; idx.push({el:d, txt:ch.text.toLowerCase()}); }
     });
+    /* ricerca integrata: digita per filtrare (parziale, senza distinzione maiuscole) */
+    if(nOpts > 8){
+      const sw = document.createElement('div'); sw.className='dd-search';
+      sw.innerHTML = '<input type="text" placeholder="🔎 Digita per filtrare…">';
+      const si = sw.querySelector('input');
+      si.addEventListener('click', ev=>ev.stopPropagation());
+      si.addEventListener('input', ()=>{
+        const q = si.value.trim().toLowerCase();
+        idx.forEach(it=>{ it.el.style.display = (!q || it.txt.includes(q)) ? '' : 'none'; });
+        grps.forEach(g=>{ g.el.style.display = g.kids.some(k=>k.style.display!=='none') ? '' : 'none'; });
+      });
+      panel.insertBefore(sw, panel.firstChild);
+      setTimeout(()=>si.focus(), 50);
+    }
     wrap.classList.add('open');
+    /* la voce scelta si centra scorrendo DENTRO il pannello: la pagina non si muove */
     const s = panel.querySelector('.sel');
-    if(s && s.scrollIntoView) s.scrollIntoView({block:'center'});
+    if(s) panel.scrollTop = Math.max(0, s.offsetTop - panel.clientHeight/2 + s.offsetHeight/2);
+    /* la pagina scorre solo se il pannello finisce tagliato fuori dallo schermo */
+    (window.requestAnimationFrame || (f=>setTimeout(f,16)))(()=>{
+      const r = panel.getBoundingClientRect();
+      const lim = window.innerHeight - 100;
+      if(r.bottom > lim && r.top > 80){
+        window.scrollBy({top: Math.min(r.bottom - lim, r.top - 80), behavior:'smooth'});
+      }
+    });
   });
 }
 document.addEventListener('click', ddCloseAll);

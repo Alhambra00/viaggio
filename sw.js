@@ -1,7 +1,7 @@
 /* Service worker — Compagno di Viaggio
    Strategia: l'app funziona offline; quando c'è rete, la pagina si aggiorna da GitHub.
    Per pubblicare una nuova versione dell'app basta cambiare VERSION qui sotto. */
-const VERSION = 'v30';
+const VERSION = 'v31';
 const SHELL = 'viaggio-shell-' + VERSION;
 const RUNTIME = 'viaggio-runtime';
 const PRECACHE = [
@@ -11,7 +11,9 @@ const PRECACHE = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 ];
 
 self.addEventListener('install', e => {
