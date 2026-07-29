@@ -56,7 +56,7 @@ body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:
 header.app{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(255,255,255,.97);
   color:var(--ink);border-bottom:1px solid var(--line);
   padding:calc(8px + env(safe-area-inset-top)) 14px 8px;display:flex;align-items:center;gap:10px}
-header.app h1{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.2}
+header.app h1{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.25;display:block}
 header.app .route{font-family:var(--mono);font-size:10px;color:var(--ink-soft);letter-spacing:.1em;white-space:nowrap;flex-shrink:0}
 header.app .live{font-family:var(--mono);font-size:10px;color:#1FA45C;letter-spacing:.14em;display:none}
 header.app .live.on{display:block}
@@ -81,6 +81,38 @@ button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .btn-primary{background:var(--grad);color:#fff;box-shadow:var(--shadow-teal)}
 .btn-ghost{background:var(--fill);color:var(--teal)}
 .btn-danger{background:transparent;color:var(--pin);border:1px solid var(--pin)}
+.btn-sm{min-height:40px;padding:8px 14px;font-size:13.5px}
+.card-accent{border:1.5px solid var(--teal);box-shadow:var(--shadow),0 0 0 4px var(--teal-soft)}
+/* --- dropdown integrato: le opzioni scendono in pagina, niente pannelli di sistema --- */
+.dd-wrap{position:relative;min-width:0}
+.dd-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:48px;
+  background:var(--fill);border:1.5px solid transparent;border-radius:14px;padding:11px 14px;
+  font-size:16px;color:var(--ink);text-align:left;font-family:inherit}
+.dd-btn .cv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.dd-btn .chev{transition:transform .18s;color:var(--ink-soft);flex-shrink:0;font-size:12px}
+.dd-wrap.open .dd-btn{background:#fff;border-color:var(--teal)}
+.dd-wrap.open .chev{transform:rotate(180deg)}
+.dd-panel{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:1300;background:var(--card);
+  border-radius:14px;box-shadow:0 14px 40px rgba(25,29,33,.18);max-height:42vh;overflow:auto;
+  opacity:0;transform:translateY(-6px);pointer-events:none;transition:opacity .16s ease,transform .16s ease}
+.dd-wrap.open .dd-panel{opacity:1;transform:none;pointer-events:auto}
+.dd-opt{padding:12px 14px;font-size:15px;border-bottom:1px solid var(--line)}
+.dd-opt:last-child{border-bottom:none}
+.dd-opt.sel{color:var(--teal);font-weight:700;background:var(--teal-soft)}
+.dd-grp{padding:9px 14px 4px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+body.dark .dd-wrap.open .dd-btn{background:#141C1F}
+body.dark .dd-panel{box-shadow:0 14px 40px rgba(0,0,0,.55)}
+/* --- animazioni cambio sezione --- */
+.view.active{animation:viewIn .2s ease}
+.view.slide-l{animation:inL .22s ease}
+.view.slide-r{animation:inR .22s ease}
+@keyframes viewIn{from{opacity:0}to{opacity:1}}
+@keyframes inL{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+@keyframes inR{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+/* --- placeholder per i campi data --- */
+.ph-wrap{position:relative}
+.ph-wrap .ph{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-soft);opacity:.75;pointer-events:none;font-size:16px}
+.ph-wrap.has .ph{display:none}
 .row{display:flex;gap:8px;align-items:center}
 .small{font-size:12px;color:var(--ink-soft)}
 .mt8{margin-top:8px}.mt12{margin-top:12px}
@@ -181,16 +213,16 @@ nav.tabs .ic{font-size:23px;line-height:1}
 .check input[type=checkbox]{width:20px;height:20px;accent-color:var(--teal);flex-shrink:0}
 .empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:18px 10px;
   background:var(--fill);border-radius:14px}
-.result-big{font-family:var(--sans);font-size:32px;font-weight:800;margin-top:8px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.result-big{font-family:var(--sans);font-size:24px;font-weight:800;margin-top:8px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
 
 <header class="app">
-  <h1>Compagno di Viaggio</h1>
-  <span class="route" id="todayLabel"></span>
-  <span class="route" style="opacity:.7">v29</span>
-  <span class="live" id="liveBadge">● LIVE</span>
+  <div style="min-width:0;flex:1">
+    <h1>Compagno di Viaggio</h1>
+    <span class="route" id="todayLabel"></span>
+  </div>
   <button id="gearBtn" title="Impostazioni" style="background:none;border:none;font-size:20px;color:var(--ink-soft);cursor:pointer;width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin:-6px 0">⚙️</button>
 </header>
 
@@ -222,10 +254,13 @@ nav.tabs .ic{font-size:23px;line-height:1}
       <select id="fxTo"></select>
     </div>
     <div class="fx-result" id="fxResult">—</div>
+    <div id="fxOptsT" class="small mt8" style="cursor:pointer;color:var(--teal);font-weight:600"><span id="fxOptsArrow">▸</span> Tassi e opzioni</div>
+    <div id="fxOpts" style="display:none">
     <div class="small fx-status" id="fxStatus"></div>
     <div class="row mt8">
-      <button class="btn btn-ghost" id="fxRefresh" style="flex:1">↻ Aggiorna tassi</button>
-      <button class="btn btn-ghost" id="fxManualBtn" style="flex:1">Tasso manuale</button>
+      <button class="btn btn-ghost btn-sm" id="fxRefresh" style="flex:1">↻ Aggiorna tassi</button>
+      <button class="btn btn-ghost btn-sm" id="fxManualBtn" style="flex:1">Tasso manuale</button>
+    </div>
     </div>
     <div class="row mt8" id="fxManualRow" style="display:none">
       <input type="number" id="fxManualRate" inputmode="decimal" placeholder="1 unità FROM = ? TO">
@@ -252,9 +287,9 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div id="countdowns"></div>
 
   <div class="eyebrow">➕ Nuovo evento</div>
-  <div class="card">
+  <div class="card card-accent">
     <input id="evName" placeholder="Nome evento (es. Volo per Lisbona)">
-    <input class="mt8" id="evDate" type="datetime-local">
+    <div class="ph-wrap mt8"><input id="evDate" type="datetime-local"><span class="ph">📅 Data e ora</span></div>
     <input class="mt8" id="evPlace" placeholder="Luogo (facoltativo)">
     <input class="mt8" id="evUrl" type="url" inputmode="url" placeholder="Link (biglietti, sito evento…) — facoltativo">
     <button class="btn btn-primary mt8" id="evAdd" style="width:100%">+ Aggiungi al calendario</button>
@@ -275,7 +310,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div class="card" id="mapResults" style="display:none;margin-bottom:8px"></div>
   <div id="map"></div>
   <div class="row mt8">
-    <button class="btn btn-ghost" id="itBuildBtn" style="flex:1">🗓 Componi itinerario</button>
+    <button class="btn btn-primary" id="itBuildBtn" style="flex:1">🗓 Componi itinerario</button>
     <button class="btn btn-ghost" id="tilesBtn" style="min-width:56px" title="Salva questa zona per l'uso offline">📥</button>
   </div>
   <div class="small" id="tilesStatus"></div>
@@ -376,7 +411,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
   <div class="card" id="bgChart"></div>
 
   <div class="eyebrow">🧾 Nuova spesa</div>
-  <div class="card">
+  <div class="card card-accent">
     <div class="row">
       <input type="number" id="bgAmt" inputmode="decimal" placeholder="Importo">
       <button class="btn btn-ghost" id="bgAmtCur" data-mode="eur" style="min-width:72px">EUR</button>
@@ -480,10 +515,9 @@ nav.tabs .ic{font-size:23px;line-height:1}
       <input type="checkbox" id="ckAll" checked style="width:18px;height:18px;accent-color:var(--teal)"> Aggiungi per tutto il gruppo
     </label>
     <div class="row mt8">
-      <button class="btn btn-ghost" id="ckPreset" style="flex:1">Carica lista base</button>
-      <button class="btn btn-danger" id="ckReset" style="flex:1">Deseleziona tutto</button>
+      <button class="btn btn-ghost btn-sm" id="ckPreset" style="flex:1">Lista base</button>
+      <button class="btn btn-danger btn-sm" id="ckReset" style="flex:1">Deseleziona</button>
     </div>
-    <div class="small mt8">Spunte personali · ✕ toglie solo dalla tua lista · 🗑 elimina per tutti (solo autore)</div>
     <div class="mt8" id="ckList"></div>
   </div>
 
@@ -591,6 +625,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
 
   <div class="eyebrow coll" data-coll="synclive">🔄 Sincronizzazione live</div>
   <div class="card">
+    <div class="small" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">Versione app: v30 <span class="live" id="liveBadge">● LIVE</span></div>
     <div class="small">Stessa configurazione + stesso codice stanza = dati in tempo reale per tutti.</div>
     <textarea id="fbCfg" rows="4" class="mt8" placeholder="Incolla qui la configurazione Firebase (il blocco firebaseConfig = { ... })"></textarea>
     <input id="fbRoom" class="mt8" placeholder="Codice stanza condiviso (es. viaggio-lisbona-2026)">
@@ -617,7 +652,7 @@ nav.tabs .ic{font-size:23px;line-height:1}
     </div>
     <div class="small mt8" id="syncStatus"></div>
   </div>
-  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v29</div>
+  <div class="small" style="text-align:center;margin-top:20px;opacity:.6">Compagno di Viaggio · versione v30</div>
 </section>
 </main>
 
@@ -663,6 +698,7 @@ document.querySelectorAll('nav.tabs button').forEach(b=>{
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     b.classList.add('active');
     document.getElementById('view-'+b.dataset.view).classList.add('active');
+    viewAnimate(b.dataset.view);
     if(b.dataset.view==='mappa') setTimeout(()=>{ if(map) map.invalidateSize(); }, 60);
   });
 });
@@ -837,6 +873,7 @@ let editingEvId = null;
 function evResetForm(){
   editingEvId = null;
   ['evName','evDate','evPlace','evUrl'].forEach(i=>document.getElementById(i).value='');
+  evPhSync();
   document.getElementById('evAdd').textContent = '+ Aggiungi al calendario';
   document.getElementById('evCancelEdit').style.display = 'none';
 }
@@ -845,6 +882,7 @@ function evStartEdit(id){
   editingEvId = id;
   document.getElementById('evName').value = e.name;
   document.getElementById('evDate').value = e.date;
+  evPhSync();
   document.getElementById('evPlace').value = e.place || '';
   document.getElementById('evUrl').value = e.url || '';
   document.getElementById('evAdd').textContent = '💾 Salva modifiche';
@@ -1659,15 +1697,14 @@ function bgChartSVG(){
 
   return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
     '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">COMPLESSIVO</div>'+svgA+'</div>'+
-    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">GIORNALIERO · OGGI</div>'+svgB+'</div></div>'+
-    '<div class="small mt8">A sinistra il totale cumulato del viaggio (curva sempre crescente, con la linea del budget); a destra la spesa di oggi rispetto al budget giornaliero.</div>'+
-    bgDayByDayHTML() + bgCatHTML();
+    '<div><div class="small" style="text-align:center;font-family:var(--mono);letter-spacing:.08em">OGGI</div>'+svgB+'</div></div>'+
+        bgDayByDayHTML() + bgCatHTML();
 }
 function bgDayByDayHTML(){
   const open = collState['bgdays']===true;
   const head = '<div class="mt12" style="border-top:1px dashed var(--line);padding-top:10px">'+
     '<div id="bgDaysToggle" style="cursor:pointer;padding:8px 0;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)">'+
-    '<span style="color:var(--teal)">'+(open?'▾':'▸')+'</span> Andamento giorno per giorno</div>';
+    '<span style="color:var(--teal)">'+(open?'▾':'▸')+'</span> Giornaliero</div>';
   if(!open) return head+'</div>';
   const pts = bgSeries();
   const daysN = tripDays();
@@ -1729,31 +1766,32 @@ function renderBudget(){
     else remDays = Math.round((new Date(tripEnd) - new Date(today))/86400000) + 1;
     if(remDays<=0){
       dEl.innerHTML = '<div class="empty">Viaggio concluso: hai speso '+both(spent)+' su '+both(budgetTotal)+'.</div>';
-      dailyLine = 'Totale: '+both(budgetTotal-spent)+' rimanenti';
+      dailyLine = 'Rimanente: '+eur(budgetTotal-spent);
     }else{
       const daily = Math.max(budgetTotal - spentBefore, 0) / remDays;
       const leftToday = daily - spentToday;
-      dailyLine = 'Oggi: '+both(Math.max(leftToday,0))+' su '+both(daily);
+      dailyLine = 'Speso oggi: '+eur(spentToday)+' · Rimanente: '+eur(budgetTotal-spent);
       const dailyOpen = collState['bgdaily']===true;
       const remPct = daily>0 ? Math.max(0, Math.min(100, leftToday/daily*100)) : 0;
       dEl.innerHTML =
-        '<div class="result-big" style="color:'+(leftToday<0?'var(--pin)':'var(--ink)')+'">'+both(leftToday)+' oggi</div>'+
+        '<div class="result-big" style="color:'+(leftToday<0?'var(--pin)':'var(--ink)')+'">Rimanente '+eur(leftToday)+'</div>'+
         '<div id="bgDailyToggle" class="mt8" style="cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)">'+
         '<span style="color:var(--teal)">'+(dailyOpen?'▾':'▸')+'</span> Dettaglio</div>'+
         (dailyOpen ?
-          '<div class="small mt8">Budget di oggi: '+both(daily)+'</div>'+
+          '<div class="small mt8">Rimanente oggi: '+both(leftToday)+'</div>'+
+          '<div class="small">Budget di oggi: '+both(daily)+'</div>'+
           '<div class="small">Speso oggi: '+both(spentToday)+'</div>'+
           '<div style="height:8px;background:var(--teal-soft);border-radius:6px;margin-top:8px;overflow:hidden">'+
           '<div style="height:100%;width:'+(leftToday<0?100:remPct)+'%;background:'+(leftToday<0?'var(--pin)':'var(--stamp)')+';transition:width .3s"></div></div>'+
-          '<div class="small" style="margin-top:4px">'+(leftToday<0?'Limite di oggi superato':'Barra = quanto ti resta oggi: piena a inizio giornata, cala spendendo')+'</div>'+
+          '<div class="small" style="margin-top:4px">'+(leftToday<0?'Limite di oggi superato':'Piena a inizio giornata, cala spendendo')+'</div>'+
           (today<tripStart?'<div class="small mt8">Il viaggio inizia il '+new Date(tripStart).toLocaleDateString('it-IT')+': questa è un\'anteprima.</div>':'')
         : '');
     }
   }else{
     dEl.innerHTML = '<div class="empty">Imposta il budget totale e le date del viaggio qui sopra: calcolerò il budget di ogni giorno (rimanente ÷ giorni restanti), aggiornato ogni mezzanotte.</div>';
-    dailyLine = budgetTotal>0 ? 'Totale: '+both(budgetTotal-spent)+' rimanenti' : 'Totale spese: '+both(spent);
+    dailyLine = budgetTotal>0 ? 'Rimanente: '+eur(budgetTotal-spent) : 'Speso: '+eur(spent);
   }
-  document.getElementById('qRemain').textContent = dailyLine + (budgetTotal>0 && days>0 ? ' · Totale: '+both(budgetTotal-spent) : '');
+  document.getElementById('qRemain').textContent = dailyLine;
 
   document.getElementById('bgChart').innerHTML = bgChartSVG() + bgDayCatHTML();
   const list = document.getElementById('bgList');
@@ -2808,7 +2846,7 @@ async function loadWeather(){
     weatherHTML = '<div class="small" style="font-weight:600">Meteo a '+esc(tripDest.name)+'</div>'+
       '<div class="row mt8" style="justify-content:space-between;text-align:center">'+
       t.time.map((day,i)=>
-        '<div style="flex:1"><div class="small">'+new Date(day).toLocaleDateString('it-IT',{weekday:'short'})+'</div>'+
+        '<div style="flex:1"><div class="small" style="white-space:nowrap">'+(new Date(day).getDate())+'/'+(new Date(day).getMonth()+1)+' '+new Date(day).toLocaleDateString('it-IT',{weekday:'short'})+'</div>'+
         '<div style="font-size:20px">'+(WMO[t.weather_code[i]]||'🌡')+'</div>'+
         '<div class="small" style="font-family:var(--mono)">'+Math.round(t.temperature_2m_min[i])+'°/'+Math.round(t.temperature_2m_max[i])+'°</div></div>'
       ).join('')+'</div>';
@@ -3202,7 +3240,7 @@ function renderItin(){
     if(String(en.id)===String(itEditId)){
       const so = v => ' '+(en.slot===v?'selected':'');
       return '<div class="item"><div class="row" style="flex:1;min-width:0">'+
-        '<select id="itEditSlot" style="max-width:120px"><option value="">fascia…</option>'+
+        '<select id="itEditSlot" data-native style="max-width:120px"><option value="">fascia…</option>'+
         '<option value="m"'+so('m')+'>🌅 Mattina</option><option value="p"'+so('p')+'>☀️ Pomeriggio</option><option value="s"'+so('s')+'>🌙 Sera</option></select>'+
         '<input type="time" id="itEditTime" value="'+(en.time||'')+'" style="flex:1;min-width:90px"></div>'+
         '<div class="acts"><button class="icon-btn" data-it-save="'+en.id+'" title="Salva">✓</button>'+
@@ -3426,6 +3464,113 @@ document.getElementById('itMap').addEventListener('click', ()=>{
   }
 });
 
+document.getElementById('fxOptsT').addEventListener('click', ()=>{
+  const p = document.getElementById('fxOpts');
+  const open = p.style.display==='none';
+  p.style.display = open ? 'block' : 'none';
+  document.getElementById('fxOptsArrow').textContent = open ? '▾' : '▸';
+});
+
+/* ============ DROPDOWN INTEGRATO: le opzioni scendono dalla casella ============ */
+function ddSync(sel){ if(sel._dd){ const o=sel.options[sel.selectedIndex]; sel._dd.querySelector('.cv').textContent = o ? o.text : '—'; } }
+function ddCloseAll(){ document.querySelectorAll('.dd-wrap.open').forEach(w=>w.classList.remove('open')); }
+function ddEnhance(sel){
+  if(sel._dd || sel.dataset.native!==undefined) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'dd-wrap' + (sel.classList.contains('mt8') ? ' mt8' : '');
+  wrap.style.cssText = sel.style.cssText;            // eredita flex / max-width del layout
+  sel.style.cssText = '';
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel);
+  sel.style.display = 'none';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'dd-btn';
+  btn.innerHTML = '<span class="cv"></span><span class="chev">▼</span>';
+  const panel = document.createElement('div');
+  panel.className = 'dd-panel';
+  wrap.appendChild(btn); wrap.appendChild(panel);
+  sel._dd = wrap;
+  ddSync(sel);
+  sel.addEventListener('change', ()=>ddSync(sel));
+  btn.addEventListener('click', e=>{
+    e.stopPropagation();
+    const was = wrap.classList.contains('open');
+    ddCloseAll();
+    if(was) return;
+    panel.innerHTML = '';                            // opzioni lette fresche a ogni apertura
+    const mk = o=>{
+      const d = document.createElement('div');
+      d.className = 'dd-opt' + (o.value===sel.value ? ' sel' : '');
+      d.textContent = o.text;
+      d.addEventListener('click', ev=>{
+        ev.stopPropagation();
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change', {bubbles:true}));
+        ddCloseAll();
+      });
+      return d;
+    };
+    [...sel.children].forEach(ch=>{
+      if(ch.tagName==='OPTGROUP'){
+        const g = document.createElement('div'); g.className='dd-grp'; g.textContent = ch.label;
+        panel.appendChild(g);
+        [...ch.children].forEach(o=>panel.appendChild(mk(o)));
+      } else panel.appendChild(mk(ch));
+    });
+    wrap.classList.add('open');
+    const s = panel.querySelector('.sel');
+    if(s && s.scrollIntoView) s.scrollIntoView({block:'center'});
+  });
+}
+document.addEventListener('click', ddCloseAll);
+/* i cambi di valore da codice aggiornano l'etichetta */
+const _selValDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+Object.defineProperty(HTMLSelectElement.prototype, 'value', {
+  get(){ return _selValDesc.get.call(this); },
+  set(v){ _selValDesc.set.call(this, v); if(this._dd) ddSync(this); }
+});
+function ddInitAll(){ document.querySelectorAll('main select').forEach(ddEnhance); }
+
+/* ============ ANIMAZIONE cambio sezione + SWIPE laterale ============ */
+const VIEW_ORDER = ['home','eventi','budget','mappa','docs','strumenti'];
+let curView = 'home';
+function viewAnimate(name){
+  const el = document.getElementById('view-'+name);
+  if(!el) return;
+  el.classList.remove('slide-l','slide-r');
+  const a = VIEW_ORDER.indexOf(curView), b = VIEW_ORDER.indexOf(name);
+  if(a>-1 && b>-1 && a!==b){ void el.offsetWidth; el.classList.add(b>a?'slide-l':'slide-r'); }
+  curView = name;
+}
+let swX=null, swY=null, swT=0;
+document.querySelector('main').addEventListener('touchstart', e=>{
+  const t = e.touches[0];
+  if(e.target.closest('#map, .dd-panel, input, select, textarea, [data-it-drag], .pass, svg')){ swX=null; return; }
+  swX=t.clientX; swY=t.clientY; swT=Date.now();
+}, {passive:true});
+document.querySelector('main').addEventListener('touchend', e=>{
+  if(swX===null) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX-swX, dy = Math.abs(t.clientY-swY);
+  swX=null;
+  if(Date.now()-swT>600 || Math.abs(dx)<70 || dy>50) return;
+  const i = VIEW_ORDER.indexOf(curView);
+  if(i<0) return;
+  const j = dx<0 ? i+1 : i-1;
+  if(j>=0 && j<VIEW_ORDER.length){
+    const btn = document.querySelector('nav.tabs button[data-view="'+VIEW_ORDER[j]+'"]');
+    if(btn) btn.click();
+  }
+});
+
+/* placeholder del campo data evento */
+function evPhSync(){
+  const w = document.getElementById('evDate').closest('.ph-wrap');
+  if(w) w.classList.toggle('has', !!document.getElementById('evDate').value);
+}
+document.getElementById('evDate').addEventListener('input', evPhSync);
+document.getElementById('evDate').addEventListener('change', evPhSync);
+
 let notesTimer=null;
 document.getElementById('notes').addEventListener('input',()=>{
   clearTimeout(notesTimer);
@@ -3457,6 +3602,8 @@ document.getElementById('notes').addEventListener('input',()=>{
   impRenderQueue();
   itin = (await store.get('itin')) || [];
   itin.forEach((e,i)=>{ if(typeof e.ord!=='number') e.ord=i; });
+  ddInitAll();
+  evPhSync();
   if(tripStart && itDateVal < tripStart) itDateVal = tripStart;   // parto dal primo giorno di viaggio
   renderItin();
   ckPersonal = (await store.get('ckPersonal')) || [];
